@@ -5,3 +5,4 @@ Werkzeug
 PyMySQL
 scikit-learn
 pandas
+gunicorn
