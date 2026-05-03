@@ -1,0 +1,26 @@
+{
+  "model_name": "XGBoost Risk AI",
+  "version": "2.0-XGBoost",
+  "training_date": "2026-05-02T21:57:10.186443",
+  "test_accuracy": 0.69895,
+  "test_f1": 0.5463039710647276,
+  "features": [
+    "product_name",
+    "farmer_location",
+    "buyer_location",
+    "weather_condition",
+    "packaging_type",
+    "is_organic",
+    "farmer_experience_years",
+    "unit_price",
+    "quantity",
+    "discount_applied",
+    "total_price",
+    "payment_method",
+    "shipping_distance_km"
+  ],
+  "classes": [
+    0,
+    1
+  ]
+}

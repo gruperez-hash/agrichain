@@ -295,62 +295,73 @@
 
 </div>
 <!-- End Shell -->
-
 <!-- ── Mobile Bottom Nav ── -->
 {% if current_user.is_authenticated %}
-<nav class="mob-nav">
+<nav class="mob-nav" role="navigation" aria-label="Mobile navigation">
   {% if current_user.role == 'farmer' %}
-    <a href="{{ url_for('dashboard') }}" class="{{ 'active' if request.endpoint == 'dashboard' }}">
+    <a href="{{ url_for('dashboard') }}" class="{{ 'active' if request.endpoint == 'dashboard' }}" title="Dashboard">
       <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
       Home
     </a>
-    <a href="{{ url_for('add_product') }}" class="{{ 'active' if request.endpoint == 'add_product' }}">
+    <a href="{{ url_for('add_product') }}" class="{{ 'active' if request.endpoint == 'add_product' }}" title="Add Product">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
       Add
     </a>
-    <a href="{{ url_for('farmer_orders') }}" class="{{ 'active' if request.endpoint == 'farmer_orders' }}">
+    <a href="{{ url_for('farmer_orders') }}" class="{{ 'active' if request.endpoint == 'farmer_orders' }}" title="Orders Received">
       <svg viewBox="0 0 24 24"><path d="M20 7H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2z"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>
       Orders
     </a>
-  {% elif current_user.role == 'admin' %}
-    <a href="{{ url_for('admin') }}#products" class="{{ 'active' if request.endpoint == 'admin' }}">
-      <svg viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/></svg>
-      Products
-    </a>
-    <a href="{{ url_for('admin') }}#reports">
-      <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-      Reports
-    </a>
-    <a href="{{ url_for('admin') }}#complaints">
-      <svg viewBox="0 0 24 24"><path d="M21 15a4 4 0 01-4 4H7l-4 4V7a4 4 0 014-4h10a4 4 0 014 4z"/></svg>
-      Cases
-    </a>
-    <a href="{{ url_for('admin') }}#users">
-      <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6"/><path d="M23 11h-6"/></svg>
-      Users
-    </a>
-  {% else %}
-    <a href="{{ url_for('marketplace') }}" class="{{ 'active' if request.endpoint == 'marketplace' }}">
-      <svg viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/></svg>
-      Market
-    </a>
-    <a href="{{ url_for('orders') }}" class="{{ 'active' if request.endpoint == 'orders' }}">
-      <svg viewBox="0 0 24 24"><path d="M20 7H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2z"/></svg>
-      Orders
-    </a>
-    <a href="{{ url_for('notifications') }}" class="{{ 'active' if request.endpoint == 'notifications' }}">
+    <a href="{{ url_for('notifications') }}" class="{{ 'active' if request.endpoint == 'notifications' }}" title="Notifications">
       <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
       Alerts
     </a>
-    <a href="{{ url_for('complaints') }}" class="{{ 'active' if request.endpoint == 'complaints' }}">
+    <a href="{{ url_for('market_insights') }}" class="{{ 'active' if request.endpoint == 'market_insights' }}" title="Market Insights">
+      <svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l3-3 4 4 5-7"/></svg>
+      Market
+    </a>
+  {% elif current_user.role == 'admin' %}
+    <a href="{{ url_for('admin') }}#products" class="{{ 'active' if request.endpoint == 'admin' }}" title="Products">
+      <svg viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/></svg>
+      Products
+    </a>
+    <a href="{{ url_for('admin') }}#reports" title="Reports">
+      <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+      Reports
+    </a>
+    <a href="{{ url_for('admin') }}#complaints" title="Complaints">
+      <svg viewBox="0 0 24 24"><path d="M21 15a4 4 0 01-4 4H7l-4 4V7a4 4 0 014-4h10a4 4 0 014 4z"/></svg>
+      Cases
+    </a>
+    <a href="{{ url_for('admin') }}#users" title="Users">
+      <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6"/><path d="M23 11h-6"/></svg>
+      Users
+    </a>
+    <a href="{{ url_for('admin') }}#notifications" title="Notifications">
+      <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+      Notify
+    </a>
+  {% else %}
+    <a href="{{ url_for('marketplace') }}" class="{{ 'active' if request.endpoint == 'marketplace' }}" title="Marketplace">
+      <svg viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/></svg>
+      Market
+    </a>
+    <a href="{{ url_for('orders') }}" class="{{ 'active' if request.endpoint == 'orders' }}" title="My Orders">
+      <svg viewBox="0 0 24 24"><path d="M20 7H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2z"/></svg>
+      Orders
+    </a>
+    <a href="{{ url_for('market_insights') }}" class="{{ 'active' if request.endpoint == 'market_insights' }}" title="Market Insights">
+      <svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l3-3 4 4 5-7"/></svg>
+      Market
+    </a>
+    <a href="{{ url_for('notifications') }}" class="{{ 'active' if request.endpoint == 'notifications' }}" title="Notifications">
+      <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+      Alerts
+    </a>
+    <a href="{{ url_for('complaints') }}" class="{{ 'active' if request.endpoint == 'complaints' }}" title="Help">
       <svg viewBox="0 0 24 24"><path d="M21 15a4 4 0 01-4 4H7l-4 4V7a4 4 0 014-4h10a4 4 0 014 4z"/></svg>
       Help
     </a>
   {% endif %}
-  <a href="{{ url_for('logout') }}">
-    <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16,17 21,12 16,7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-    Out
-  </a>
 </nav>
 {% endif %}
 

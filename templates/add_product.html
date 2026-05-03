@@ -68,7 +68,7 @@
           <label class="form-label">Product Photo</label>
           <div id="dropzone" style="border:2px dashed var(--border);border-radius:var(--r-lg);padding:28px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s" onclick="document.getElementById('imageInput').click()">
             <div id="dropzone-content">
-              <div style="font-size:32px;margin-bottom:8px">Photo</div>
+              <div style="font-size:32px;margin-bottom:8px">📷</div>
               <div class="font-bold text-sm">Click to upload photo</div>
               <div class="text-muted text-xs mt-1">PNG, JPG, GIF, or WEBP up to 5MB{{ ' - leave blank to keep current photo' if product else '' }}</div>
             </div>
@@ -88,12 +88,34 @@
       </form>
     </div>
   </div>
+
+  {# ── AI Price Intelligence Panel ─────────────────────────────────────────── #}
+  <div id="ai-price-panel" style="display:none;margin-top:16px;transition:all .3s">
+    <div class="card" id="ai-price-card" style="border-left:4px solid var(--border);transition:border-color .3s">
+      <div class="card-body" style="padding:16px 20px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <span style="font-size:20px" id="ai-icon">🤖</span>
+          <span class="font-bold" style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)">AI Price Intelligence</span>
+          <span id="ai-spinner" style="display:none;margin-left:auto;font-size:12px;color:var(--muted);font-style:italic">Analysing…</span>
+        </div>
+        <div id="ai-price-message" class="text-sm" style="line-height:1.6;color:var(--text)"></div>
+        <div id="ai-price-suggestion" style="display:none;margin-top:10px;padding:10px 14px;border-radius:var(--r-md);background:#fffbeb;border:1px solid #fcd34d">
+          <span class="font-bold text-sm">💡 Suggested ceiling: </span>
+          <span id="ai-suggested-val" class="font-bold" style="color:#b45309;font-size:15px"></span>
+          <span class="text-muted text-xs" id="ai-reduction-pct" style="margin-left:4px"></span>
+          <button type="button" id="ai-apply-btn" onclick="applyAiPrice()" class="btn btn-secondary btn-sm" style="margin-left:12px;font-size:11px">Apply</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 {% endblock %}
 
 {% block scripts %}
 <script>
+/* ── Image upload helpers ─────────────────────────────────────────────────── */
 function previewImage(input) {
   const file = input.files[0];
   if (!file) return;
@@ -107,13 +129,14 @@ function previewImage(input) {
   reader.readAsDataURL(file);
 }
 
+/* ── Custom unit toggle ──────────────────────────────────────────────────── */
 function toggleCustomUnit(value) {
-  const customUnitGroup = document.getElementById('customUnitGroup');
-  const customUnitInput = document.getElementById('custom_unit');
+  const group = document.getElementById('customUnitGroup');
+  const input = document.getElementById('custom_unit');
   const isCustom = value === 'custom';
-  customUnitGroup.style.display = isCustom ? 'flex' : 'none';
-  customUnitInput.required = isCustom;
-  if (!isCustom) customUnitInput.value = '';
+  group.style.display = isCustom ? 'flex' : 'none';
+  input.required = isCustom;
+  if (!isCustom) input.value = '';
 }
 
 toggleCustomUnit(document.getElementById('unit').value);
@@ -121,17 +144,118 @@ if (document.getElementById('preview').getAttribute('src')) {
   document.getElementById('dropzone-content').style.display = 'none';
 }
 
+/* ── Drag-and-drop ───────────────────────────────────────────────────────── */
 const dz = document.getElementById('dropzone');
-dz.addEventListener('dragover', e => { e.preventDefault(); dz.style.borderColor = 'var(--accent)'; dz.style.background = 'var(--green-50)'; });
-dz.addEventListener('dragleave', () => { dz.style.borderColor = ''; dz.style.background = ''; });
+dz.addEventListener('dragover', e => {
+  e.preventDefault();
+  dz.style.borderColor = 'var(--accent)';
+  dz.style.background  = 'var(--green-50)';
+});
+dz.addEventListener('dragleave', () => {
+  dz.style.borderColor = '';
+  dz.style.background  = '';
+});
 dz.addEventListener('drop', e => {
-  e.preventDefault(); dz.style.borderColor = ''; dz.style.background = '';
+  e.preventDefault();
+  dz.style.borderColor = '';
+  dz.style.background  = '';
   const file = e.dataTransfer.files[0];
   if (file && file.type.startsWith('image/')) {
     const input = document.getElementById('imageInput');
-    const dt = new DataTransfer(); dt.items.add(file); input.files = dt.files;
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    input.files = dt.files;
     previewImage(input);
   }
+});
+
+/* ── AI Price Simulation ─────────────────────────────────────────────────── */
+let _aiTimer  = null;
+let _lastSuggested = null;
+
+const BORDER_COLORS = {
+  safe:        '#22c55e',
+  warning:     '#f59e0b',
+  danger:      '#ef4444',
+  unavailable: '#9ca3af'
+};
+const AI_ICONS = {
+  safe: '✅', warning: '⚠️', danger: '🚨', unavailable: '🤖'
+};
+
+function applyAiPrice() {
+  if (_lastSuggested) {
+    document.getElementById('price').value = _lastSuggested.toFixed(2);
+    document.getElementById('ai-price-panel').style.display = 'none';
+  }
+}
+
+function runAiPriceCheck() {
+  const priceEl = document.getElementById('price');
+  const nameEl  = document.getElementById('name');
+  const qtyEl   = document.getElementById('quantity');
+  const panel   = document.getElementById('ai-price-panel');
+  const card    = document.getElementById('ai-price-card');
+  const msg     = document.getElementById('ai-price-message');
+  const spinner = document.getElementById('ai-spinner');
+  const sugBox  = document.getElementById('ai-price-suggestion');
+  const sugVal  = document.getElementById('ai-suggested-val');
+  const redPct  = document.getElementById('ai-reduction-pct');
+
+  const price = parseFloat(priceEl.value);
+  const name  = nameEl.value.trim();
+  const qty   = parseFloat(qtyEl.value) || 1;
+
+  if (!name || isNaN(price) || price <= 0) {
+    panel.style.display = 'none';
+    return;
+  }
+
+  panel.style.display = 'block';
+  spinner.style.display = 'inline';
+  sugBox.style.display  = 'none';
+  msg.textContent = 'Running AI analysis…';
+
+  fetch('/api/v1/ai/simulate-price', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({
+      product_name:   name,
+      proposed_price: price,
+      quantity:       qty,
+      payment_method: 'COD'
+    })
+  })
+  .then(r => r.json())
+  .then(data => {
+    spinner.style.display = 'none';
+    card.style.borderLeftColor = BORDER_COLORS[data.status] || '#9ca3af';
+    document.getElementById('ai-icon').textContent = AI_ICONS[data.status] || '🤖';
+    msg.textContent = data.message || '';
+
+    if (data.status === 'warning' && data.suggested_price) {
+      _lastSuggested       = data.suggested_price;
+      sugVal.textContent   = '\u20B1' + data.suggested_price.toFixed(2);
+      redPct.textContent   = '(' + data.reduction_percent + '% lower than your input)';
+      sugBox.style.display = 'block';
+    } else {
+      _lastSuggested = null;
+    }
+  })
+  .catch(() => {
+    spinner.style.display = 'none';
+    card.style.borderLeftColor = BORDER_COLORS.unavailable;
+    document.getElementById('ai-icon').textContent = AI_ICONS.unavailable;
+    msg.textContent = 'AI check unavailable right now.';
+  });
+}
+
+/* Debounce: wait 850ms after the user stops typing before firing */
+['price', 'quantity', 'name'].forEach(id => {
+  document.getElementById(id).addEventListener('input', () => {
+    clearTimeout(_aiTimer);
+    _aiTimer = setTimeout(runAiPriceCheck, 850);
+  });
 });
 </script>
 {% endblock %}

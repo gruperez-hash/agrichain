@@ -27,6 +27,7 @@
           <th>Stock Left</th>
           <th>Total</th>
           <th>Payment</th>
+          <th>AI Risk</th>
           <th>Status</th>
           <th>Tracking</th>
           <th>Action</th>
@@ -62,6 +63,25 @@
           </td>
           <td class="font-bold text-success">₱{{ "%.2f"|format(o.total_price) }}</td>
           <td><span class="badge b-gray">{{ o.payment_method }}</span></td>
+          <td>
+            {# AI Risk Badge — loaded client-side via data attributes #}
+            {% if o.status == 'Pending' %}
+            <span class="ai-risk-badge"
+                  data-order-id="{{ o.id }}"
+                  data-product="{{ o.product.name }}"
+                  data-buyer-loc="{{ o.buyer.location or '' }}"
+                  data-farmer-loc="{{ o.product.farmer.location if o.product.farmer else '' }}"
+                  data-price="{{ o.product.price or 0 }}"
+                  data-qty="{{ o.quantity or 1 }}"
+                  data-total="{{ o.total_price or 0 }}"
+                  data-payment="{{ o.payment_method or 'COD' }}"
+                  style="font-size:11px;padding:3px 8px">
+              <span style="color:var(--muted);font-style:italic;font-size:11px">checking…</span>
+            </span>
+            {% else %}
+              <span class="badge b-gray" style="font-size:11px">N/A</span>
+            {% endif %}
+          </td>
           <td>
             {% if o.status == 'Pending' %}
               <span class="badge b-amber">Pending</span>
@@ -127,4 +147,46 @@
 </div>
 {% endif %}
 
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* ── AI Risk Badges: batch-check all pending orders on page load ─────────── */
+document.addEventListener('DOMContentLoaded', function () {
+  const badges = document.querySelectorAll('.ai-risk-badge');
+  if (!badges.length) return;
+
+  badges.forEach(function (badge) {
+    const payload = {
+      product_name:    badge.dataset.product,
+      farmer_location: badge.dataset.farmerLoc,
+      buyer_location:  badge.dataset.buyerLoc,
+      unit_price:      parseFloat(badge.dataset.price)  || 0,
+      quantity:        parseFloat(badge.dataset.qty)    || 1,
+      total_price:     parseFloat(badge.dataset.total)  || 0,
+      payment_method:  badge.dataset.payment || 'COD'
+    };
+
+    fetch('/api/v1/ai/check-risk', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload)
+    })
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      if (data.is_risk === 1) {
+        badge.innerHTML =
+          '<span class="badge b-red" title="AI: ' + Math.round(data.risk_probability * 100) + '% cancellation risk">' +
+          '⚠ High Risk ' + Math.round(data.risk_probability * 100) + '%</span>';
+      } else {
+        badge.innerHTML =
+          '<span class="badge b-green" title="AI: Low cancellation risk">✓ Safe</span>';
+      }
+    })
+    .catch(function () {
+      badge.innerHTML = '<span class="badge b-gray" style="font-size:11px">AI N/A</span>';
+    });
+  });
+});
+</script>
 {% endblock %}

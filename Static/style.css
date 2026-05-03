@@ -1604,3 +1604,50 @@ select.form-control { cursor: pointer; background-image: url("data:image/svg+xml
     border-radius: 14px;
   }
 }
+
+/* ── AgriChain mobile polish ─────────────────── */
+@media (max-width: 599px) {
+
+  /* Wider label column for long labels (Stock Left, AI Risk, Tracking) */
+  .table-wrap tbody td::before {
+    flex: 0 0 100px;
+    font-size: 10px;
+  }
+
+  /* Action column buttons: stack vertically, full-width touch targets */
+  .table-wrap tbody td > .flex.items-center {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    width: 100%;
+  }
+  .table-wrap tbody td > .flex.items-center .btn {
+    width: 100%;
+    justify-content: center;
+    min-height: 40px;
+  }
+
+  /* ph Back/secondary button: auto width, not stretched */
+  .ph > a.btn,
+  .ph > .btn-secondary {
+    width: auto !important;
+    align-self: flex-start;
+  }
+
+  /* AI price suggestion box: stack vertically on phone */
+  #ai-price-suggestion {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 6px !important;
+  }
+  #ai-price-suggestion button {
+    width: 100%;
+    margin-left: 0 !important;
+  }
+
+  /* AI badge inside table card */
+  .ai-risk-badge {
+    display: inline-flex;
+    justify-content: flex-end;
+  }
+}

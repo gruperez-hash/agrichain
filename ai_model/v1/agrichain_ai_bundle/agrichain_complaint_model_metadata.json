@@ -1,0 +1,31 @@
+{
+  "model_name": "Complaint Classifier",
+  "training_date": "2026-05-02T21:18:49.943508",
+  "dataset_rows": 50000,
+  "train_accuracy": 0.70005,
+  "test_accuracy": 0.6968,
+  "test_f1": 0.512540192926045,
+  "test_precision": 0.36660533578656856,
+  "test_recall": 0.8514957264957265,
+  "model_version": "1.0",
+  "features": [
+    "product_name",
+    "total_price",
+    "payment_method",
+    "delivery_days"
+  ],
+  "feature_importances": {
+    "product_name": 0.018064994358650093,
+    "total_price": 0.1400056570688626,
+    "payment_method": 0.016383572241489917,
+    "delivery_days": 0.8255457763309973
+  },
+  "classes": [
+    0,
+    1
+  ],
+  "class_labels": [
+    "No Complaint",
+    "Has Complaint"
+  ]
+}

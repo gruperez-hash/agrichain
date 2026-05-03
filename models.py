@@ -136,3 +136,12 @@ class Complaint(db.Model):
 
     user = db.relationship('User', backref='complaints')
     order = db.relationship('Order', backref='complaints')
+
+class ProductPriceHistory(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
+    old_price = db.Column(db.Float, nullable=False)
+    new_price = db.Column(db.Float, nullable=False)
+    changed_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    product = db.relationship('Product', backref='price_history')

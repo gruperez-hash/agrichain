@@ -54,7 +54,10 @@ def _database_url():
             'Add your Supabase Postgres connection string in Railway Variables.'
         )
 
-    return 'mysql+pymysql://root:@localhost/agrichain_db'
+    # Local dev: use SQLite — zero config, no server needed.
+    # Set DATABASE_URL in your environment to point to MySQL/Postgres in production.
+    db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'agrichain.db')
+    return f'sqlite:///{db_path}'
 
 
 class Config:

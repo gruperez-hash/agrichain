@@ -27,6 +27,9 @@ import xml.etree.ElementTree as ET
 app = Flask(__name__, static_folder='Static', static_url_path='/static')
 app.config.from_object(Config)
 
+from ai_routes import ai_bp
+app.register_blueprint(ai_bp)
+
 DELIVERY_STATUSES = [
     'Address Confirmation',
     'Preparing Order',
@@ -174,6 +177,10 @@ def ensure_database_ready():
 @app.before_request
 def prevent_disabled_account_access():
     if request.endpoint == 'static':
+        return
+
+    # AI inference routes are pure ML — no DB needed
+    if request.endpoint and request.endpoint.startswith('ai_bp.'):
         return
 
     ensure_database_ready()

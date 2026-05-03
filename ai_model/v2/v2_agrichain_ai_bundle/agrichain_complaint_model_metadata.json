@@ -1,0 +1,21 @@
+{
+  "model_name": "XGBoost Complaint AI",
+  "version": "2.0-XGBoost",
+  "training_date": "2026-05-02T21:57:10.192492",
+  "test_accuracy": 0.74805,
+  "test_f1": 0.06667901463233933,
+  "features": [
+    "product_name",
+    "total_price",
+    "payment_method",
+    "delivery_days",
+    "weather_condition",
+    "packaging_type",
+    "shipping_distance_km",
+    "farmer_experience_years"
+  ],
+  "classes": [
+    0,
+    1
+  ]
+}
