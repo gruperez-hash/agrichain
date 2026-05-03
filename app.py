@@ -1,16 +1,21 @@
 from flask import Flask, Response, jsonify, render_template, request, redirect, url_for, flash
 from config import Config
-from models import Complaint, DeliveryProof, OrderDelivery, OrderMessage, OrderTimeline, ProductRating, ProductReview
+from models import Complaint, OrderDelivery, OrderMessage, OrderTimeline, ProductRating, ProductReview
 from models import db, User, Product, Order, Notification  # ✅ Added Notification
 from flask_login import LoginManager, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from sqlalchemy import func, inspect, text
 from sqlalchemy.exc import IntegrityError
-from recommendation import get_similar_products
-from demand_prediction import train_demand_model, predict_product_demand
+from recommendation import get_similar_product_details
+from demand_prediction import (
+    build_product_feature_rows,
+    load_demand_artifact,
+    predict_demand_for_products,
+    train_demand_model
+)
 from market_insights import build_market_rows, build_market_summary, build_price_insights
-from smart_insights import build_farmer_summary, build_product_insights
+from smart_insights import build_farmer_ai_advice, build_farmer_summary, build_product_insights
 from datetime import datetime
 from email.utils import parsedate_to_datetime
 from html import unescape
@@ -24,7 +29,7 @@ import os
 import time
 import xml.etree.ElementTree as ET
 
-app = Flask(__name__, static_folder='Static', static_url_path='/static')
+app = Flask(__name__)
 app.config.from_object(Config)
 
 DELIVERY_STATUSES = [
@@ -37,7 +42,6 @@ DELIVERY_STATUSES = [
 PRODUCT_REVIEW_STATUSES = ['Pending', 'Approved', 'Rejected']
 COMPLAINT_STATUSES = ['Open', 'In Review', 'Resolved', 'Dismissed']
 NOTIFICATION_AUDIENCES = ['all', 'farmers', 'buyers']
-PROOF_UPLOAD_FOLDER = 'delivery_proofs'
 IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
 LOW_STOCK_THRESHOLD = 5
@@ -99,13 +103,13 @@ CROP_NEWS_ITEMS = [
     {
         'title': 'Fruits and vegetables sector prepares for fuel cost risks',
         'date': 'April 8, 2026',
-        'category': 'Logistics',
+        'category': 'Transport Costs',
         'summary': (
             'The National Sectoral Committee on Fruits and Vegetables backed a '
             'mitigation plan for fuel supply concerns that may affect farm '
-            'logistics, production costs, and market stability.'
+            'transport costs, production costs, and market stability.'
         ),
-        'impact': 'Sellers should monitor transport costs when setting delivery and product prices.',
+        'impact': 'Sellers should monitor transport costs when setting product prices.',
         'source': 'Philippine Council for Agriculture and Fisheries',
         'url': 'https://pcaf.da.gov.ph/index.php/2026/04/08/nsc-fv-backs-mitigation-plan-vs-fuel-concerns-endorses-key-agri-budget-proposal/'
     }
@@ -114,7 +118,7 @@ CROP_NEWS_ITEMS = [
 CROP_NEWS_HIGHLIGHTS = [
     {'label': 'Export crops to watch', 'value': 'Banana, mango, avocado, durian'},
     {'label': 'Protected vegetable focus', 'value': 'Chili, tomato, bell pepper'},
-    {'label': 'Farmer planning signal', 'value': 'Track logistics and weather risks'}
+    {'label': 'Farmer planning signal', 'value': 'Track weather and transport cost risks'}
 ]
 
 CROP_NEWS_KEYWORDS = [
@@ -168,7 +172,6 @@ def ensure_database_ready():
     ensure_product_unit_schema()
     ensure_product_reviews()
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-    os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], PROOF_UPLOAD_FOLDER), exist_ok=True)
     DATABASE_READY = True
 
 @app.before_request
@@ -259,11 +262,6 @@ def save_image_file(file, subfolder=''):
     file.save(os.path.join(upload_dir, filename))
     return f"{subfolder}/{filename}" if subfolder else filename
 
-def save_delivery_proof(file):
-    if validate_image_upload(file):
-        return None
-    return save_image_file(file, PROOF_UPLOAD_FOLDER)
-
 def parse_positive_float(value, default=0):
     try:
         number = float(value)
@@ -293,22 +291,11 @@ def get_product_unit(form):
     return selected_unit if selected_unit in allowed_units else 'unit'
 
 def quote_table_name(name):
-    return db.engine.dialect.identifier_preparer.quote(name)
-
-def quote_column_name(name):
-    return db.engine.dialect.identifier_preparer.quote(name)
-
-def boolean_default_sql():
-    return 'BOOLEAN DEFAULT 0' if db.engine.dialect.name == 'mysql' else 'BOOLEAN DEFAULT FALSE'
+    return f"`{name}`" if db.engine.dialect.name == 'mysql' else name
 
 def add_column_if_missing(connection, table_name, columns, column_name, definition):
     if column_name not in columns:
-        connection.execute(
-            text(
-                f"ALTER TABLE {quote_table_name(table_name)} "
-                f"ADD COLUMN {quote_column_name(column_name)} {definition}"
-            )
-        )
+        connection.execute(text(f"ALTER TABLE {quote_table_name(table_name)} ADD COLUMN {column_name} {definition}"))
 
 def ensure_product_unit_schema():
     inspector = inspect(db.engine)
@@ -317,12 +304,12 @@ def ensure_product_unit_schema():
     with db.engine.begin() as connection:
         if 'user' in table_names:
             user_columns = {column['name'] for column in inspector.get_columns('user')}
-            add_column_if_missing(connection, 'user', user_columns, 'disabled', boolean_default_sql())
+            add_column_if_missing(connection, 'user', user_columns, 'disabled', 'BOOLEAN DEFAULT 0')
 
         if 'product' in table_names:
             product_columns = {column['name'] for column in inspector.get_columns('product')}
             add_column_if_missing(connection, 'product', product_columns, 'unit', "VARCHAR(30) DEFAULT 'unit'")
-            add_column_if_missing(connection, 'product', product_columns, 'is_deleted', boolean_default_sql())
+            add_column_if_missing(connection, 'product', product_columns, 'is_deleted', 'BOOLEAN DEFAULT 0')
 
             if db.engine.dialect.name == 'mysql':
                 connection.execute(text("ALTER TABLE product MODIFY quantity FLOAT"))
@@ -582,6 +569,30 @@ def make_report_csv(products, orders):
 
     return output.getvalue()
 
+def make_training_csv(products, orders):
+    output = StringIO()
+    rows = build_product_feature_rows(products, orders, include_label=True)
+    fieldnames = [
+        'product_id',
+        'product_name',
+        'location',
+        'unit',
+        'price',
+        'quantity',
+        'order_count',
+        'units_sold',
+        'approved_revenue',
+        'avg_order_value',
+        'demand_label'
+    ]
+    writer = csv.DictWriter(output, fieldnames=fieldnames)
+    writer.writeheader()
+
+    for row in rows:
+        writer.writerow(row)
+
+    return output.getvalue()
+
 def clean_feed_text(value, max_length=220):
     text = unescape(value or '')
     text = re.sub(r'<[^>]+>', ' ', text)
@@ -682,7 +693,7 @@ def fetch_feed_items(feed):
             'published_at': parse_feed_date(published),
             'category': classify_crop_news(clean_title, clean_summary),
             'summary': clean_summary or 'Open the source to read the full crop and agriculture update.',
-            'impact': 'Live news item. Review the source before using it for planting, pricing, or logistics decisions.',
+            'impact': 'Live news item. Review the source before using it for planting or pricing decisions.',
             'source': feed['name'],
             'url': link or feed['url']
         })
@@ -997,21 +1008,26 @@ def dashboard():
 
     all_products = Product.query.filter_by(is_deleted=False).all()
     all_orders = Order.query.all()
-    model, name_encoder, location_encoder = train_demand_model(all_products, all_orders)
-    market_rows = build_market_rows(all_products, all_orders)
+    demand_artifact = load_demand_artifact(app.config.get('DEMAND_MODEL_PATH'))
+    if demand_artifact is None:
+        demand_artifact = train_demand_model(all_products, all_orders)
 
-    demand_predictions = {}
-    for product in products:
-        demand_predictions[product.id] = predict_product_demand(
-            product,
-            model,
-            name_encoder,
-            location_encoder
-        )
+    market_rows = build_market_rows(all_products, all_orders)
+    demand_predictions = predict_demand_for_products(
+        products,
+        all_orders,
+        demand_artifact
+    )
 
     product_insights = build_product_insights(products, orders, demand_predictions)
     smart_summary = build_farmer_summary(product_insights)
     price_insights = build_price_insights(products, market_rows)
+    farmer_ai_advice = build_farmer_ai_advice(
+        products,
+        product_insights,
+        price_insights,
+        demand_predictions
+    )
 
     return render_template(
         'dashboard.html',
@@ -1021,7 +1037,8 @@ def dashboard():
         demand_predictions=demand_predictions,
         price_insights=price_insights,
         product_insights=product_insights,
-        smart_summary=smart_summary
+        smart_summary=smart_summary,
+        farmer_ai_advice=farmer_ai_advice
     )
 
 @app.route('/admin')
@@ -1108,6 +1125,23 @@ def admin_download_report():
     orders = Order.query.all()
     csv_data = make_report_csv(products, orders)
     filename = f"agrichain-sales-demand-report-{datetime.now().strftime('%Y%m%d')}.csv"
+
+    return Response(
+        csv_data,
+        mimetype='text/csv',
+        headers={'Content-Disposition': f'attachment; filename={filename}'}
+    )
+
+@app.route('/admin/reports/training-data/download')
+@login_required
+def admin_download_training_data():
+    if current_user.role != 'admin':
+        return redirect('/login')
+
+    products = Product.query.filter_by(is_deleted=False).all()
+    orders = Order.query.all()
+    csv_data = make_training_csv(products, orders)
+    filename = f"agrichain-demand-training-data-{datetime.now().strftime('%Y%m%d')}.csv"
 
     return Response(
         csv_data,
@@ -1408,7 +1442,8 @@ def order(product_id):
         return redirect('/marketplace')
 
     all_products = get_approved_products()
-    recommended_products = get_similar_products(all_products, product_id, top_n=4)
+    recommendation_details = get_similar_product_details(all_products, product_id, top_n=4)
+    recommended_products = [item['product'] for item in recommendation_details]
     
     if request.method == 'POST':
         order_quantity = parse_positive_float(request.form.get('quantity'), default=0)
@@ -1487,7 +1522,8 @@ def order(product_id):
         'payment.html',
         product=product,
         available_quantity=available_quantity,
-        recommended_products=recommended_products
+        recommended_products=recommended_products,
+        recommendation_details=recommendation_details
     )
 
 # ✅ Added missing /orders route
@@ -1578,22 +1614,9 @@ def order_detail(order_id):
 
             new_status = request.form.get('delivery_status')
             tracking_note = request.form.get('tracking_note', '').strip()
-            proof_file = request.files.get('proof_image')
 
             if new_status not in DELIVERY_STATUSES:
                 flash("Invalid delivery status.", "error")
-                return redirect(url_for('order_detail', order_id=order.id))
-
-            proof_error = validate_image_upload(proof_file)
-            if proof_error:
-                flash(proof_error, "error")
-                return redirect(url_for('order_detail', order_id=order.id))
-
-            proof_filename = save_delivery_proof(proof_file)
-            existing_proof = order.delivery_proof
-
-            if new_status == 'Delivered' and current_user.role != 'admin' and not proof_filename and not existing_proof:
-                flash("Please upload a delivery proof photo before marking this order delivered.", "error")
                 return redirect(url_for('order_detail', order_id=order.id))
 
             delivery.status = new_status
@@ -1604,21 +1627,12 @@ def order_detail(order_id):
                 delivery.tracking_note,
                 current_user
             )
-            if new_status == 'Delivered' and (proof_filename or existing_proof):
-                proof_note = tracking_note or delivery.tracking_note
-                if existing_proof:
-                    if proof_filename:
-                        existing_proof.image = proof_filename
-                    existing_proof.note = proof_note
-                    existing_proof.uploaded_by = current_user.id
-                    existing_proof.created_at = datetime.utcnow()
-                else:
-                    db.session.add(DeliveryProof(
-                        order_id=order.id,
-                        image=proof_filename,
-                        note=proof_note,
-                        uploaded_by=current_user.id
-                    ))
+            db.session.add(OrderMessage(
+                order_id=order.id,
+                sender_id=current_user.id,
+                receiver_id=order.buyer_id,
+                message=f"Tracking update: {new_status}. {delivery.tracking_note}"
+            ))
             db.session.add(Notification(
                 user_id=order.buyer_id,
                 message=f"Tracking updated for order #{order.id}: {new_status}"
