@@ -8,12 +8,85 @@ from werkzeug.utils import secure_filename
 from sqlalchemy import func, inspect, text
 from sqlalchemy.exc import IntegrityError
 from recommendation import get_similar_product_details
-from demand_prediction import (
-    build_product_feature_rows,
-    load_demand_artifact,
-    predict_demand_for_products,
-    train_demand_model
-)
+try:
+    from demand_prediction import (
+        build_product_feature_rows,
+        load_demand_artifact,
+        predict_demand_for_products,
+        train_demand_model
+    )
+except ImportError:
+    from demand_prediction import (
+        predict_product_demand as _legacy_predict_product_demand,
+        train_demand_model as _legacy_train_demand_model
+    )
+
+    def _fallback_float(value, default=0):
+        try:
+            return float(value or default)
+        except (TypeError, ValueError):
+            return default
+
+    def build_product_feature_rows(products, orders=None, include_label=False):
+        orders_by_product = {}
+        for order in orders or []:
+            orders_by_product.setdefault(order.product_id, []).append(order)
+
+        rows = []
+        for product in products:
+            product_orders = [
+                order for order in orders_by_product.get(product.id, [])
+                if (order.status or '').lower() not in {'cancelled', 'rejected'}
+            ]
+            approved_orders = [
+                order for order in product_orders
+                if (order.status or '').lower() == 'approved'
+            ]
+            order_count = len(product_orders)
+            units_sold = sum(_fallback_float(order.quantity) for order in approved_orders)
+            approved_revenue = sum(_fallback_float(order.total_price) for order in approved_orders)
+            row = {
+                'product_id': product.id,
+                'product_name': product.name or 'Unknown Product',
+                'location': product.farmer.location if product.farmer else 'Unknown Location',
+                'unit': getattr(product, 'unit', None) or 'unit',
+                'price': _fallback_float(product.price),
+                'quantity': _fallback_float(product.quantity),
+                'order_count': order_count,
+                'units_sold': units_sold,
+                'approved_revenue': approved_revenue,
+                'avg_order_value': approved_revenue / len(approved_orders) if approved_orders else 0
+            }
+            if include_label:
+                row['demand_label'] = 'High' if order_count >= 3 or units_sold >= 5 else 'Low'
+            rows.append(row)
+
+        return rows
+
+    def load_demand_artifact(model_path=None):
+        return None
+
+    def train_demand_model(products, orders):
+        model, name_encoder, location_encoder = _legacy_train_demand_model(products, orders)
+        return {
+            'legacy_model': model,
+            'name_encoder': name_encoder,
+            'location_encoder': location_encoder
+        }
+
+    def predict_demand_for_products(products, orders=None, artifact=None):
+        if not artifact or not artifact.get('legacy_model'):
+            return {product.id: 'Not enough data' for product in products}
+
+        return {
+            product.id: _legacy_predict_product_demand(
+                product,
+                artifact['legacy_model'],
+                artifact['name_encoder'],
+                artifact['location_encoder']
+            )
+            for product in products
+        }
 from market_insights import build_market_rows, build_market_summary, build_price_insights
 from smart_insights import build_farmer_ai_advice, build_farmer_summary, build_product_insights
 from datetime import datetime
