@@ -293,11 +293,22 @@ def get_product_unit(form):
     return selected_unit if selected_unit in allowed_units else 'unit'
 
 def quote_table_name(name):
-    return f"`{name}`" if db.engine.dialect.name == 'mysql' else name
+    return db.engine.dialect.identifier_preparer.quote(name)
+
+def quote_column_name(name):
+    return db.engine.dialect.identifier_preparer.quote(name)
+
+def boolean_default_sql():
+    return 'BOOLEAN DEFAULT 0' if db.engine.dialect.name == 'mysql' else 'BOOLEAN DEFAULT FALSE'
 
 def add_column_if_missing(connection, table_name, columns, column_name, definition):
     if column_name not in columns:
-        connection.execute(text(f"ALTER TABLE {quote_table_name(table_name)} ADD COLUMN {column_name} {definition}"))
+        connection.execute(
+            text(
+                f"ALTER TABLE {quote_table_name(table_name)} "
+                f"ADD COLUMN {quote_column_name(column_name)} {definition}"
+            )
+        )
 
 def ensure_product_unit_schema():
     inspector = inspect(db.engine)
@@ -306,12 +317,12 @@ def ensure_product_unit_schema():
     with db.engine.begin() as connection:
         if 'user' in table_names:
             user_columns = {column['name'] for column in inspector.get_columns('user')}
-            add_column_if_missing(connection, 'user', user_columns, 'disabled', 'BOOLEAN DEFAULT 0')
+            add_column_if_missing(connection, 'user', user_columns, 'disabled', boolean_default_sql())
 
         if 'product' in table_names:
             product_columns = {column['name'] for column in inspector.get_columns('product')}
             add_column_if_missing(connection, 'product', product_columns, 'unit', "VARCHAR(30) DEFAULT 'unit'")
-            add_column_if_missing(connection, 'product', product_columns, 'is_deleted', 'BOOLEAN DEFAULT 0')
+            add_column_if_missing(connection, 'product', product_columns, 'is_deleted', boolean_default_sql())
 
             if db.engine.dialect.name == 'mysql':
                 connection.execute(text("ALTER TABLE product MODIFY quantity FLOAT"))
@@ -1931,6 +1942,4 @@ def approve_order(order_id):
 if __name__ == '__main__':
     with app.app_context():
         ensure_database_ready()
-
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(debug=True)
