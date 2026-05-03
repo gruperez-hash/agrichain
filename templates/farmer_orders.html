@@ -103,7 +103,6 @@
             {% else %}
               <div class="flex items-center gap-2">
                 <a href="{{ url_for('order_detail', order_id=o.id) }}" class="btn btn-secondary btn-sm">Manage</a>
-                <a href="{{ url_for('logistics') }}" class="btn btn-primary btn-sm">Logistics</a>
                 {% if o.delivery.status == 'Delivered' %}
                   <a href="{{ url_for('order_receipt', order_id=o.id) }}" class="btn btn-secondary btn-sm">Receipt</a>
                 {% endif %}
