@@ -41,6 +41,46 @@ def _market_action(demand_trend, total_stock):
     return "Collect more data"
 
 
+def _market_reading(demand_trend, total_stock, listing_count, farmer_count):
+    if demand_trend == "High Demand" and total_stock <= 10:
+        return (
+            "Demand is strong but available stock is tight. Farmers can benefit "
+            "from adding supply while buyers should order early."
+        )
+    if demand_trend == "High Demand":
+        return (
+            "Demand is strong and supply is still present. This product is a good "
+            "candidate for steady harvesting and close price monitoring."
+        )
+    if demand_trend == "Active Demand":
+        return (
+            "Orders are starting to move. Watch whether new listings increase "
+            "competition or confirm stronger demand."
+        )
+    if listing_count <= 1 or farmer_count <= 1:
+        return (
+            "Market signal is still thin because there are few comparable listings."
+        )
+    if total_stock >= 20:
+        return (
+            "Supply is available but buyer demand is still low. Promotion or price "
+            "review may help move stock."
+        )
+    return "More product and order records are needed for a stronger market signal."
+
+
+def _market_next_step(demand_trend, total_stock):
+    if demand_trend == "High Demand" and total_stock <= 10:
+        return "Farmers: increase supply. Buyers: reserve stock before it runs out."
+    if demand_trend == "High Demand":
+        return "Maintain supply and review price only after new orders come in."
+    if demand_trend == "Active Demand":
+        return "Monitor price changes and watch the next few orders."
+    if total_stock >= 20:
+        return "Improve product visibility or consider a competitive price."
+    return "Collect more listings and transaction data."
+
+
 def build_market_rows(products, orders):
     orders_by_product = defaultdict(list)
     for order in orders:
@@ -86,6 +126,8 @@ def build_market_rows(products, orders):
         prices = group["prices"]
         avg_price = sum(prices) / len(prices) if prices else 0
         demand_trend = _demand_trend(group["order_count"], group["units_sold"])
+        farmer_count = len(group["farmer_count"])
+        market_action = _market_action(demand_trend, group["total_stock"])
 
         market_rows.append({
             "key": group["key"],
@@ -96,12 +138,19 @@ def build_market_rows(products, orders):
             "max_price": max(prices) if prices else 0,
             "total_stock": group["total_stock"],
             "listing_count": group["listing_count"],
-            "farmer_count": len(group["farmer_count"]),
+            "farmer_count": farmer_count,
             "order_count": group["order_count"],
             "units_sold": group["units_sold"],
             "approved_revenue": group["approved_revenue"],
             "demand_trend": demand_trend,
-            "market_action": _market_action(demand_trend, group["total_stock"])
+            "market_action": market_action,
+            "ai_reading": _market_reading(
+                demand_trend,
+                group["total_stock"],
+                group["listing_count"],
+                farmer_count
+            ),
+            "next_step": _market_next_step(demand_trend, group["total_stock"])
         })
 
     return sorted(
@@ -148,7 +197,9 @@ def build_price_insights(products, market_rows):
                 "status": "No comparison yet",
                 "avg_price": row["avg_price"] if row else 0,
                 "difference": 0,
-                "suggestion": "Collect more market data"
+                "suggestion": "Collect more market data",
+                "detail": "Price guidance will improve after more similar listings appear.",
+                "next_step": "Keep product details updated so future comparisons are accurate."
             }
             continue
 
@@ -158,18 +209,26 @@ def build_price_insights(products, market_rows):
         if current_price > avg_price * 1.15:
             status = "Above Market"
             suggestion = "Review price"
+            detail = f"Your price is {abs(difference):.1f}% above the market average."
+            next_step = "Consider a modest reduction or add value through quality and delivery notes."
         elif current_price < avg_price * 0.85:
             status = "Below Market"
             suggestion = "Possible price increase"
+            detail = f"Your price is {abs(difference):.1f}% below the market average."
+            next_step = "If orders stay active, test a small price increase."
         else:
             status = "Fair Price"
             suggestion = "Keep current price"
+            detail = "Your price is close to the current market average."
+            next_step = "Maintain price and monitor demand before changing it."
 
         insights[product.id] = {
             "status": status,
             "avg_price": avg_price,
             "difference": difference,
-            "suggestion": suggestion
+            "suggestion": suggestion,
+            "detail": detail,
+            "next_step": next_step
         }
 
     return insights
