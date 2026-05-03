@@ -1578,14 +1578,23 @@ def order_detail(order_id):
 
             new_status = request.form.get('delivery_status')
             tracking_note = request.form.get('tracking_note', '').strip()
+            proof_file = request.files.get('proof_image')
 
             if new_status not in DELIVERY_STATUSES:
                 flash("Invalid delivery status.", "error")
                 return redirect(url_for('order_detail', order_id=order.id))
 
-            if new_status == 'Delivered' and current_user.role != 'admin' and not order.delivery_proof:
-                flash("Use the Logistics page to upload proof before marking this order delivered.", "error")
-                return redirect(url_for('logistics'))
+            proof_error = validate_image_upload(proof_file)
+            if proof_error:
+                flash(proof_error, "error")
+                return redirect(url_for('order_detail', order_id=order.id))
+
+            proof_filename = save_delivery_proof(proof_file)
+            existing_proof = order.delivery_proof
+
+            if new_status == 'Delivered' and current_user.role != 'admin' and not proof_filename and not existing_proof:
+                flash("Please upload a delivery proof photo before marking this order delivered.", "error")
+                return redirect(url_for('order_detail', order_id=order.id))
 
             delivery.status = new_status
             delivery.tracking_note = tracking_note or f"Tracking updated to {new_status}."
@@ -1595,6 +1604,21 @@ def order_detail(order_id):
                 delivery.tracking_note,
                 current_user
             )
+            if new_status == 'Delivered' and (proof_filename or existing_proof):
+                proof_note = tracking_note or delivery.tracking_note
+                if existing_proof:
+                    if proof_filename:
+                        existing_proof.image = proof_filename
+                    existing_proof.note = proof_note
+                    existing_proof.uploaded_by = current_user.id
+                    existing_proof.created_at = datetime.utcnow()
+                else:
+                    db.session.add(DeliveryProof(
+                        order_id=order.id,
+                        image=proof_filename,
+                        note=proof_note,
+                        uploaded_by=current_user.id
+                    ))
             db.session.add(Notification(
                 user_id=order.buyer_id,
                 message=f"Tracking updated for order #{order.id}: {new_status}"
@@ -1702,119 +1726,6 @@ def farmer_orders():
         orders=orders,
         availability=build_product_availability(products)
     )
-
-@app.route('/logistics')
-@login_required
-def logistics():
-    if current_user.role != 'farmer':
-        return redirect('/marketplace')
-
-    orders = (
-        Order.query
-        .join(Product)
-        .filter(
-            Product.farmer_id == current_user.id,
-            Order.status == 'Approved'
-        )
-        .order_by(Order.created_at.desc())
-        .all()
-    )
-
-    for seller_order in orders:
-        ensure_delivery(seller_order)
-
-    db.session.commit()
-    return render_template('logistics.html', orders=orders)
-
-@app.route('/logistics/<int:order_id>/update', methods=['POST'])
-@login_required
-def update_logistics(order_id):
-    if current_user.role != 'farmer':
-        return redirect('/marketplace')
-
-    order = Order.query.get_or_404(order_id)
-    if not order.product or order.product.farmer_id != current_user.id:
-        flash("You can only update logistics for your own product orders.", "error")
-        return redirect('/logistics')
-
-    if order.status != 'Approved':
-        flash("Approve the order before updating logistics.", "error")
-        return redirect('/logistics')
-
-    delivery = ensure_delivery(order)
-    action = request.form.get('action')
-    note = request.form.get('proof_note', '').strip()
-
-    if action == 'on_the_way':
-        delivery.status = 'Out for Delivery'
-        delivery.tracking_note = note or 'Seller confirmed the order is still on the way.'
-        ensure_order_timeline(order)
-        add_order_timeline(
-            order,
-            'Out for Delivery',
-            delivery.tracking_note,
-            current_user
-        )
-        db.session.add(Notification(
-            user_id=order.buyer_id,
-            message=f"Your order #{order.id} for {order.product.name} is on the way."
-        ))
-        db.session.commit()
-        flash("Order marked as on the way.", "success")
-        return redirect('/logistics')
-
-    if action == 'delivered':
-        proof_file = request.files.get('proof_image')
-        proof_error = validate_image_upload(proof_file)
-        if proof_error:
-            flash(proof_error, "error")
-            return redirect('/logistics')
-
-        proof_filename = save_delivery_proof(proof_file)
-        existing_proof = order.delivery_proof
-
-        if not proof_filename and not existing_proof:
-            flash("Please upload a delivery proof photo before marking as delivered.", "error")
-            return redirect('/logistics')
-
-        delivery.status = 'Delivered'
-        delivery.tracking_note = note or 'Seller confirmed the order was delivered with proof photo.'
-        ensure_order_timeline(order)
-        add_order_timeline(
-            order,
-            'Delivered',
-            delivery.tracking_note,
-            current_user
-        )
-
-        if existing_proof:
-            if proof_filename:
-                existing_proof.image = proof_filename
-            existing_proof.note = note
-            existing_proof.uploaded_by = current_user.id
-            existing_proof.created_at = datetime.utcnow()
-        else:
-            db.session.add(DeliveryProof(
-                order_id=order.id,
-                image=proof_filename,
-                note=note,
-                uploaded_by=current_user.id
-            ))
-
-        db.session.add(Notification(
-            user_id=order.buyer_id,
-            message=f"Your order #{order.id} for {order.product.name} was marked delivered with proof."
-        ))
-        db.session.add(Notification(
-            user_id=current_user.id,
-            message=f"Delivery proof uploaded for order #{order.id}."
-        ))
-        db.session.commit()
-        flash("Order marked as delivered and proof saved.", "success")
-        return redirect('/logistics')
-
-    flash("Choose a valid logistics update.", "error")
-    return redirect('/logistics')
 
 @app.route('/orders/<int:order_id>/cancel', methods=['POST'])
 @login_required
