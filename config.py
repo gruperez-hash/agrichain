@@ -43,7 +43,7 @@ def _engine_options(database_url):
 
 
 def _database_url():
-    database_url = os.environ.get('DATABASE_URL') or os.environ.get('SUPABASE_DATABASE_URL')
+    database_url = os.environ.get('SUPABASE_DATABASE_URL') or os.environ.get('DATABASE_URL')
 
     if database_url:
         return database_url
