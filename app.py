@@ -290,7 +290,7 @@ import os
 import time
 import xml.etree.ElementTree as ET
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='Static', static_url_path='/static')
 app.config.from_object(Config)
 
 DELIVERY_STATUSES = [
