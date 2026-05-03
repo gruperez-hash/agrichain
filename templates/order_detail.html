@@ -187,7 +187,7 @@
           {% elif delivery.status == 'Delivered' %}
             Delivery has reached the buyer address.
           {% else %}
-            Delivery is idle until the seller updates it from the logistics page.
+            Delivery is idle until the seller updates the tracking status.
           {% endif %}
         </div>
 
@@ -259,7 +259,7 @@
     <div class="card mb-4">
       <div class="card-hd"><span class="card-hd-title">Seller Tracking Update</span></div>
       <div class="card-body">
-        <form method="POST">
+        <form method="POST" enctype="multipart/form-data">
           <input type="hidden" name="action" value="update_delivery">
           <div class="form-group">
             <label class="form-label" for="delivery_status">Delivery Status</label>
@@ -273,6 +273,11 @@
             <label class="form-label" for="tracking_note">Tracking Note</label>
             <textarea id="tracking_note" name="tracking_note" class="form-control"
                       style="min-height:80px;padding-top:10px;resize:vertical">{{ delivery.tracking_note }}</textarea>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="proof_image">Proof of Delivery Photo</label>
+            <input id="proof_image" name="proof_image" class="form-control" type="file" accept="image/*">
+            <div class="form-hint">Required when marking delivered unless proof was already uploaded.</div>
           </div>
           <button type="submit" class="btn btn-primary">
             <svg viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/></svg>
