@@ -555,41 +555,7 @@ body {
   .map-meta { grid-template-columns: 1fr; }
 }
 
-/* Logistics workflow */
-.logistics-list {
-  display: grid;
-  gap: 18px;
-}
-.logistics-card {
-  overflow: hidden;
-}
-.logistics-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, .8fr);
-  gap: 24px;
-}
-.logistics-product-img {
-  width: 64px;
-  height: 64px;
-  border-radius: var(--r-md);
-  object-fit: cover;
-  border: 1px solid var(--border);
-  flex-shrink: 0;
-}
-.logistics-product-placeholder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--green-50);
-  color: var(--green-800);
-  font-weight: 800;
-}
-.logistics-form {
-  padding: 16px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  background: var(--n50);
-}
+/* Delivery proof */
 .delivery-proof-thumb,
 .delivery-proof-full {
   display: block;
@@ -606,11 +572,6 @@ body {
 .delivery-proof-full {
   max-height: 280px;
   background: var(--n100);
-}
-@media (max-width: 900px) {
-  .logistics-grid {
-    grid-template-columns: 1fr;
-  }
 }
 
 /* Timeline and receipts */
@@ -1113,8 +1074,7 @@ select.form-control { cursor: pointer; background-image: url("data:image/svg+xml
   }
   .card,
   .product-card,
-  .crop-news-card,
-  .logistics-card {
+  .crop-news-card {
     border-radius: 16px;
   }
   .card-body {
@@ -1133,8 +1093,7 @@ select.form-control { cursor: pointer; background-image: url("data:image/svg+xml
     font-size: 24px;
   }
   .grid,
-  .product-grid,
-  .logistics-list {
+  .product-grid {
     gap: 12px;
   }
   .product-grid {
@@ -1237,20 +1196,6 @@ select.form-control { cursor: pointer; background-image: url("data:image/svg+xml
   }
   .map-pin-label {
     font-size: 10px;
-  }
-  .logistics-product-img {
-    width: 56px;
-    height: 56px;
-  }
-  .logistics-form {
-    padding: 14px;
-    border-radius: 16px;
-  }
-  .logistics-form .flex {
-    flex-direction: column;
-  }
-  .logistics-form .btn {
-    width: 100%;
   }
   .delivery-proof-thumb,
   .delivery-proof-full {
