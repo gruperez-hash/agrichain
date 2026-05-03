@@ -17,7 +17,6 @@ try:
     )
 except ImportError:
     from demand_prediction import (
-        predict_product_demand as _legacy_predict_product_demand,
         train_demand_model as _legacy_train_demand_model
     )
 
@@ -78,15 +77,31 @@ except ImportError:
         if not artifact or not artifact.get('legacy_model'):
             return {product.id: 'Not enough data' for product in products}
 
-        return {
-            product.id: _legacy_predict_product_demand(
-                product,
-                artifact['legacy_model'],
-                artifact['name_encoder'],
-                artifact['location_encoder']
-            )
-            for product in products
-        }
+        import pandas as pd
+
+        predictions = {}
+        model = artifact['legacy_model']
+        name_encoder = artifact['name_encoder']
+        location_encoder = artifact['location_encoder']
+
+        for product in products:
+            name = product.name or ''
+            location = product.farmer.location if product.farmer else ''
+
+            if name not in name_encoder.classes_ or location not in location_encoder.classes_:
+                predictions[product.id] = 'Not enough similar data'
+                continue
+
+            input_data = pd.DataFrame([{
+                'price': product.price or 0,
+                'quantity': product.quantity or 0,
+                'name': name_encoder.transform([name])[0],
+                'location': location_encoder.transform([location])[0]
+            }])
+            prediction = model.predict(input_data)[0]
+            predictions[product.id] = 'High Demand' if prediction == 1 else 'Low Demand'
+
+        return predictions
 try:
     from market_insights import build_market_rows, build_market_summary, build_price_insights
 except Exception:
