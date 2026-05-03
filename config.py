@@ -41,10 +41,27 @@ def _engine_options(database_url):
 
     return options
 
+
+def _database_url():
+    database_url = os.environ.get('DATABASE_URL') or os.environ.get('SUPABASE_DATABASE_URL')
+
+    if database_url:
+        return database_url
+
+    if os.environ.get('RAILWAY_ENVIRONMENT') or os.environ.get('RAILWAY_PROJECT_ID'):
+        raise RuntimeError(
+            'Missing SUPABASE_DATABASE_URL or DATABASE_URL. '
+            'Add your Supabase Postgres connection string in Railway Variables.'
+        )
+
+    return 'mysql+pymysql://root:@localhost/agrichain_db'
+
+
 class Config:
-    SECRET_KEY = 'secret123'
-    SQLALCHEMY_DATABASE_URI = 'mysql+pymysql://root:@localhost/agrichain_db'
+    SECRET_KEY = os.environ.get('SECRET_KEY', 'secret123')
+    SQLALCHEMY_DATABASE_URI = _normalize_database_url(_database_url())
+    SQLALCHEMY_ENGINE_OPTIONS = _engine_options(SQLALCHEMY_DATABASE_URI)
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    UPLOAD_FOLDER = os.path.join('Static', 'uploads') 
+    UPLOAD_FOLDER = os.path.join('Static', 'uploads')
     ADMIN_USERNAME = os.environ.get('ADMIN_USERNAME', 'admin')
     ADMIN_MASTER_KEY = os.environ.get('ADMIN_MASTER_KEY', 'agrichain123')
