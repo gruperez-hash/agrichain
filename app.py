@@ -1,16 +1,282 @@
 from flask import Flask, Response, jsonify, render_template, request, redirect, url_for, flash
 from config import Config
-from models import Complaint, DeliveryProof, OrderDelivery, OrderMessage, OrderTimeline, ProductRating, ProductReview
+from models import Complaint, OrderDelivery, OrderMessage, OrderTimeline, ProductRating, ProductReview
 from models import db, User, Product, Order, Notification  # ✅ Added Notification
 from flask_login import LoginManager, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from sqlalchemy import func, inspect, text
 from sqlalchemy.exc import IntegrityError
-from recommendation import get_similar_products
-from demand_prediction import train_demand_model, predict_product_demand
-from market_insights import build_market_rows, build_market_summary, build_price_insights
-from smart_insights import build_farmer_summary, build_product_insights
+from recommendation import get_similar_product_details
+try:
+    from demand_prediction import (
+        build_product_feature_rows,
+        load_demand_artifact,
+        predict_demand_for_products,
+        train_demand_model
+    )
+except ImportError:
+    from demand_prediction import (
+        train_demand_model as _legacy_train_demand_model
+    )
+
+    def _fallback_float(value, default=0):
+        try:
+            return float(value or default)
+        except (TypeError, ValueError):
+            return default
+
+    def build_product_feature_rows(products, orders=None, include_label=False):
+        orders_by_product = {}
+        for order in orders or []:
+            orders_by_product.setdefault(order.product_id, []).append(order)
+
+        rows = []
+        for product in products:
+            product_orders = [
+                order for order in orders_by_product.get(product.id, [])
+                if (order.status or '').lower() not in {'cancelled', 'rejected'}
+            ]
+            approved_orders = [
+                order for order in product_orders
+                if (order.status or '').lower() == 'approved'
+            ]
+            order_count = len(product_orders)
+            units_sold = sum(_fallback_float(order.quantity) for order in approved_orders)
+            approved_revenue = sum(_fallback_float(order.total_price) for order in approved_orders)
+            row = {
+                'product_id': product.id,
+                'product_name': product.name or 'Unknown Product',
+                'location': product.farmer.location if product.farmer else 'Unknown Location',
+                'unit': getattr(product, 'unit', None) or 'unit',
+                'price': _fallback_float(product.price),
+                'quantity': _fallback_float(product.quantity),
+                'order_count': order_count,
+                'units_sold': units_sold,
+                'approved_revenue': approved_revenue,
+                'avg_order_value': approved_revenue / len(approved_orders) if approved_orders else 0
+            }
+            if include_label:
+                row['demand_label'] = 'High' if order_count >= 3 or units_sold >= 5 else 'Low'
+            rows.append(row)
+
+        return rows
+
+    def load_demand_artifact(model_path=None):
+        return None
+
+    def train_demand_model(products, orders):
+        model, name_encoder, location_encoder = _legacy_train_demand_model(products, orders)
+        return {
+            'legacy_model': model,
+            'name_encoder': name_encoder,
+            'location_encoder': location_encoder
+        }
+
+    def predict_demand_for_products(products, orders=None, artifact=None):
+        if not artifact or not artifact.get('legacy_model'):
+            return {product.id: 'Not enough data' for product in products}
+
+        import pandas as pd
+
+        predictions = {}
+        model = artifact['legacy_model']
+        name_encoder = artifact['name_encoder']
+        location_encoder = artifact['location_encoder']
+
+        for product in products:
+            name = product.name or ''
+            location = product.farmer.location if product.farmer else ''
+
+            if name not in name_encoder.classes_ or location not in location_encoder.classes_:
+                predictions[product.id] = 'Not enough similar data'
+                continue
+
+            input_data = pd.DataFrame([{
+                'price': product.price or 0,
+                'quantity': product.quantity or 0,
+                'name': name_encoder.transform([name])[0],
+                'location': location_encoder.transform([location])[0]
+            }])
+            prediction = model.predict(input_data)[0]
+            predictions[product.id] = 'High Demand' if prediction == 1 else 'Low Demand'
+
+        return predictions
+try:
+    from market_insights import build_market_rows, build_market_summary, build_price_insights
+except Exception:
+    from collections import defaultdict
+
+    def _market_float(value, default=0):
+        try:
+            return float(value or default)
+        except (TypeError, ValueError):
+            return default
+
+    def _market_product_key(product):
+        name = (product.name or '').strip().lower()
+        unit = (getattr(product, 'unit', None) or 'unit').strip().lower()
+        return f"{name or f'product-{product.id}'}::{unit}"
+
+    def _market_demand_trend(order_count, units_sold):
+        if order_count >= 5 or units_sold >= 5:
+            return 'High Demand'
+        if order_count > 0:
+            return 'Active Demand'
+        return 'Low Demand'
+
+    def _market_action(demand_trend, total_stock):
+        if demand_trend == 'High Demand' and total_stock <= 10:
+            return 'Increase supply'
+        if demand_trend == 'High Demand':
+            return 'Maintain supply'
+        if demand_trend == 'Active Demand':
+            return 'Monitor pricing'
+        if total_stock >= 20:
+            return 'Promote product'
+        return 'Collect more data'
+
+    def _market_reading(demand_trend, total_stock, listing_count):
+        if demand_trend == 'High Demand' and total_stock <= 10:
+            return 'Demand is strong but available stock is tight.'
+        if demand_trend == 'High Demand':
+            return 'Demand is strong and supply is still present.'
+        if demand_trend == 'Active Demand':
+            return 'Orders are starting to move. Keep monitoring price and stock.'
+        if listing_count <= 1:
+            return 'Market signal is still thin because there are few comparable listings.'
+        return 'More listings and orders are needed for a stronger market signal.'
+
+    def _market_next_step(demand_trend, total_stock):
+        if demand_trend == 'High Demand' and total_stock <= 10:
+            return 'Increase supply while buyers are active.'
+        if demand_trend == 'High Demand':
+            return 'Maintain supply and monitor new orders.'
+        if demand_trend == 'Active Demand':
+            return 'Watch the next few orders before changing price.'
+        if total_stock >= 20:
+            return 'Improve visibility or consider a competitive price.'
+        return 'Collect more product and transaction data.'
+
+    def build_market_rows(products, orders):
+        orders_by_product = defaultdict(list)
+        for order in orders:
+            orders_by_product[order.product_id].append(order)
+
+        groups = {}
+        for product in products:
+            key = _market_product_key(product)
+            group = groups.setdefault(key, {
+                'key': key,
+                'name': product.name or 'Unnamed Product',
+                'unit': product.unit or 'unit',
+                'prices': [],
+                'total_stock': 0,
+                'listing_count': 0,
+                'farmer_count': set(),
+                'order_count': 0,
+                'units_sold': 0,
+                'approved_revenue': 0
+            })
+            group['prices'].append(_market_float(product.price))
+            group['total_stock'] += _market_float(product.quantity)
+            group['listing_count'] += 1
+            if product.farmer:
+                group['farmer_count'].add(product.farmer_id)
+
+            for order in orders_by_product.get(product.id, []):
+                status = (order.status or '').lower()
+                if status in {'cancelled', 'rejected'}:
+                    continue
+                group['order_count'] += 1
+                if status == 'approved':
+                    group['units_sold'] += _market_float(order.quantity)
+                    group['approved_revenue'] += _market_float(order.total_price)
+
+        rows = []
+        for group in groups.values():
+            prices = group['prices']
+            avg_price = sum(prices) / len(prices) if prices else 0
+            demand_trend = _market_demand_trend(group['order_count'], group['units_sold'])
+            rows.append({
+                'key': group['key'],
+                'name': group['name'],
+                'unit': group['unit'],
+                'avg_price': avg_price,
+                'min_price': min(prices) if prices else 0,
+                'max_price': max(prices) if prices else 0,
+                'total_stock': group['total_stock'],
+                'listing_count': group['listing_count'],
+                'farmer_count': len(group['farmer_count']),
+                'order_count': group['order_count'],
+                'units_sold': group['units_sold'],
+                'approved_revenue': group['approved_revenue'],
+                'demand_trend': demand_trend,
+                'market_action': _market_action(demand_trend, group['total_stock']),
+                'ai_reading': _market_reading(demand_trend, group['total_stock'], group['listing_count']),
+                'next_step': _market_next_step(demand_trend, group['total_stock'])
+            })
+
+        return sorted(rows, key=lambda row: (-row['units_sold'], -row['order_count'], row['name'].lower()))
+
+    def build_market_summary(market_rows):
+        if not market_rows:
+            return {
+                'product_types': 0,
+                'total_stock': 0,
+                'total_orders': 0,
+                'total_units_sold': 0,
+                'average_market_price': 0,
+                'high_demand_count': 0
+            }
+        return {
+            'product_types': len(market_rows),
+            'total_stock': sum(row['total_stock'] for row in market_rows),
+            'total_orders': sum(row['order_count'] for row in market_rows),
+            'total_units_sold': sum(row['units_sold'] for row in market_rows),
+            'average_market_price': sum(row['avg_price'] for row in market_rows) / len(market_rows),
+            'high_demand_count': sum(1 for row in market_rows if row['demand_trend'] == 'High Demand')
+        }
+
+    def build_price_insights(products, market_rows):
+        rows_by_key = {row['key']: row for row in market_rows}
+        insights = {}
+        for product in products:
+            row = rows_by_key.get(_market_product_key(product))
+            current_price = _market_float(product.price)
+            if not row or row['listing_count'] < 2 or row['avg_price'] <= 0:
+                insights[product.id] = {
+                    'status': 'No comparison yet',
+                    'avg_price': row['avg_price'] if row else 0,
+                    'difference': 0,
+                    'suggestion': 'Collect more market data',
+                    'detail': 'Price guidance will improve after more similar listings appear.',
+                    'next_step': 'Keep product details updated so future comparisons are accurate.'
+                }
+                continue
+
+            avg_price = row['avg_price']
+            difference = ((current_price - avg_price) / avg_price) * 100
+            if current_price > avg_price * 1.15:
+                status = 'Above Market'
+                suggestion = 'Review price'
+            elif current_price < avg_price * 0.85:
+                status = 'Below Market'
+                suggestion = 'Possible price increase'
+            else:
+                status = 'Fair Price'
+                suggestion = 'Keep current price'
+
+            insights[product.id] = {
+                'status': status,
+                'avg_price': avg_price,
+                'difference': difference,
+                'suggestion': suggestion,
+                'detail': f'Your price is {abs(difference):.1f}% from the market average.',
+                'next_step': suggestion
+            }
+        return insights
+from smart_insights import build_farmer_ai_advice, build_farmer_summary, build_product_insights
 from datetime import datetime
 from email.utils import parsedate_to_datetime
 from html import unescape
@@ -40,7 +306,6 @@ DELIVERY_STATUSES = [
 PRODUCT_REVIEW_STATUSES = ['Pending', 'Approved', 'Rejected']
 COMPLAINT_STATUSES = ['Open', 'In Review', 'Resolved', 'Dismissed']
 NOTIFICATION_AUDIENCES = ['all', 'farmers', 'buyers']
-PROOF_UPLOAD_FOLDER = 'delivery_proofs'
 IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
 LOW_STOCK_THRESHOLD = 5
@@ -102,13 +367,13 @@ CROP_NEWS_ITEMS = [
     {
         'title': 'Fruits and vegetables sector prepares for fuel cost risks',
         'date': 'April 8, 2026',
-        'category': 'Logistics',
+        'category': 'Transport Costs',
         'summary': (
             'The National Sectoral Committee on Fruits and Vegetables backed a '
             'mitigation plan for fuel supply concerns that may affect farm '
-            'logistics, production costs, and market stability.'
+            'transport costs, production costs, and market stability.'
         ),
-        'impact': 'Sellers should monitor transport costs when setting delivery and product prices.',
+        'impact': 'Sellers should monitor transport costs when setting product prices.',
         'source': 'Philippine Council for Agriculture and Fisheries',
         'url': 'https://pcaf.da.gov.ph/index.php/2026/04/08/nsc-fv-backs-mitigation-plan-vs-fuel-concerns-endorses-key-agri-budget-proposal/'
     }
@@ -117,7 +382,7 @@ CROP_NEWS_ITEMS = [
 CROP_NEWS_HIGHLIGHTS = [
     {'label': 'Export crops to watch', 'value': 'Banana, mango, avocado, durian'},
     {'label': 'Protected vegetable focus', 'value': 'Chili, tomato, bell pepper'},
-    {'label': 'Farmer planning signal', 'value': 'Track logistics and weather risks'}
+    {'label': 'Farmer planning signal', 'value': 'Track weather and transport cost risks'}
 ]
 
 CROP_NEWS_KEYWORDS = [
@@ -171,7 +436,6 @@ def ensure_database_ready():
     ensure_product_unit_schema()
     ensure_product_reviews()
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-    os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], PROOF_UPLOAD_FOLDER), exist_ok=True)
     DATABASE_READY = True
 
 @app.before_request
@@ -266,11 +530,6 @@ def save_image_file(file, subfolder=''):
     file.save(os.path.join(upload_dir, filename))
     return f"{subfolder}/{filename}" if subfolder else filename
 
-def save_delivery_proof(file):
-    if validate_image_upload(file):
-        return None
-    return save_image_file(file, PROOF_UPLOAD_FOLDER)
-
 def parse_positive_float(value, default=0):
     try:
         number = float(value)
@@ -300,22 +559,11 @@ def get_product_unit(form):
     return selected_unit if selected_unit in allowed_units else 'unit'
 
 def quote_table_name(name):
-    return db.engine.dialect.identifier_preparer.quote(name)
-
-def quote_column_name(name):
-    return db.engine.dialect.identifier_preparer.quote(name)
-
-def boolean_default_sql():
-    return 'BOOLEAN DEFAULT 0' if db.engine.dialect.name == 'mysql' else 'BOOLEAN DEFAULT FALSE'
+    return f"`{name}`" if db.engine.dialect.name == 'mysql' else name
 
 def add_column_if_missing(connection, table_name, columns, column_name, definition):
     if column_name not in columns:
-        connection.execute(
-            text(
-                f"ALTER TABLE {quote_table_name(table_name)} "
-                f"ADD COLUMN {quote_column_name(column_name)} {definition}"
-            )
-        )
+        connection.execute(text(f"ALTER TABLE {quote_table_name(table_name)} ADD COLUMN {column_name} {definition}"))
 
 def ensure_product_unit_schema():
     inspector = inspect(db.engine)
@@ -324,12 +572,12 @@ def ensure_product_unit_schema():
     with db.engine.begin() as connection:
         if 'user' in table_names:
             user_columns = {column['name'] for column in inspector.get_columns('user')}
-            add_column_if_missing(connection, 'user', user_columns, 'disabled', boolean_default_sql())
+            add_column_if_missing(connection, 'user', user_columns, 'disabled', 'BOOLEAN DEFAULT 0')
 
         if 'product' in table_names:
             product_columns = {column['name'] for column in inspector.get_columns('product')}
             add_column_if_missing(connection, 'product', product_columns, 'unit', "VARCHAR(30) DEFAULT 'unit'")
-            add_column_if_missing(connection, 'product', product_columns, 'is_deleted', boolean_default_sql())
+            add_column_if_missing(connection, 'product', product_columns, 'is_deleted', 'BOOLEAN DEFAULT 0')
 
             if db.engine.dialect.name == 'mysql':
                 connection.execute(text("ALTER TABLE product MODIFY quantity FLOAT"))
@@ -589,6 +837,30 @@ def make_report_csv(products, orders):
 
     return output.getvalue()
 
+def make_training_csv(products, orders):
+    output = StringIO()
+    rows = build_product_feature_rows(products, orders, include_label=True)
+    fieldnames = [
+        'product_id',
+        'product_name',
+        'location',
+        'unit',
+        'price',
+        'quantity',
+        'order_count',
+        'units_sold',
+        'approved_revenue',
+        'avg_order_value',
+        'demand_label'
+    ]
+    writer = csv.DictWriter(output, fieldnames=fieldnames)
+    writer.writeheader()
+
+    for row in rows:
+        writer.writerow(row)
+
+    return output.getvalue()
+
 def clean_feed_text(value, max_length=220):
     text = unescape(value or '')
     text = re.sub(r'<[^>]+>', ' ', text)
@@ -689,7 +961,7 @@ def fetch_feed_items(feed):
             'published_at': parse_feed_date(published),
             'category': classify_crop_news(clean_title, clean_summary),
             'summary': clean_summary or 'Open the source to read the full crop and agriculture update.',
-            'impact': 'Live news item. Review the source before using it for planting, pricing, or logistics decisions.',
+            'impact': 'Live news item. Review the source before using it for planting or pricing decisions.',
             'source': feed['name'],
             'url': link or feed['url']
         })
@@ -1004,21 +1276,26 @@ def dashboard():
 
     all_products = Product.query.filter_by(is_deleted=False).all()
     all_orders = Order.query.all()
-    model, name_encoder, location_encoder = train_demand_model(all_products, all_orders)
-    market_rows = build_market_rows(all_products, all_orders)
+    demand_artifact = load_demand_artifact(app.config.get('DEMAND_MODEL_PATH'))
+    if demand_artifact is None:
+        demand_artifact = train_demand_model(all_products, all_orders)
 
-    demand_predictions = {}
-    for product in products:
-        demand_predictions[product.id] = predict_product_demand(
-            product,
-            model,
-            name_encoder,
-            location_encoder
-        )
+    market_rows = build_market_rows(all_products, all_orders)
+    demand_predictions = predict_demand_for_products(
+        products,
+        all_orders,
+        demand_artifact
+    )
 
     product_insights = build_product_insights(products, orders, demand_predictions)
     smart_summary = build_farmer_summary(product_insights)
     price_insights = build_price_insights(products, market_rows)
+    farmer_ai_advice = build_farmer_ai_advice(
+        products,
+        product_insights,
+        price_insights,
+        demand_predictions
+    )
 
     return render_template(
         'dashboard.html',
@@ -1028,7 +1305,8 @@ def dashboard():
         demand_predictions=demand_predictions,
         price_insights=price_insights,
         product_insights=product_insights,
-        smart_summary=smart_summary
+        smart_summary=smart_summary,
+        farmer_ai_advice=farmer_ai_advice
     )
 
 @app.route('/admin')
@@ -1115,6 +1393,23 @@ def admin_download_report():
     orders = Order.query.all()
     csv_data = make_report_csv(products, orders)
     filename = f"agrichain-sales-demand-report-{datetime.now().strftime('%Y%m%d')}.csv"
+
+    return Response(
+        csv_data,
+        mimetype='text/csv',
+        headers={'Content-Disposition': f'attachment; filename={filename}'}
+    )
+
+@app.route('/admin/reports/training-data/download')
+@login_required
+def admin_download_training_data():
+    if current_user.role != 'admin':
+        return redirect('/login')
+
+    products = Product.query.filter_by(is_deleted=False).all()
+    orders = Order.query.all()
+    csv_data = make_training_csv(products, orders)
+    filename = f"agrichain-demand-training-data-{datetime.now().strftime('%Y%m%d')}.csv"
 
     return Response(
         csv_data,
@@ -1415,7 +1710,8 @@ def order(product_id):
         return redirect('/marketplace')
 
     all_products = get_approved_products()
-    recommended_products = get_similar_products(all_products, product_id, top_n=4)
+    recommendation_details = get_similar_product_details(all_products, product_id, top_n=4)
+    recommended_products = [item['product'] for item in recommendation_details]
     
     if request.method == 'POST':
         order_quantity = parse_positive_float(request.form.get('quantity'), default=0)
@@ -1494,7 +1790,8 @@ def order(product_id):
         'payment.html',
         product=product,
         available_quantity=available_quantity,
-        recommended_products=recommended_products
+        recommended_products=recommended_products,
+        recommendation_details=recommendation_details
     )
 
 # ✅ Added missing /orders route
@@ -1585,22 +1882,9 @@ def order_detail(order_id):
 
             new_status = request.form.get('delivery_status')
             tracking_note = request.form.get('tracking_note', '').strip()
-            proof_file = request.files.get('proof_image')
 
             if new_status not in DELIVERY_STATUSES:
                 flash("Invalid delivery status.", "error")
-                return redirect(url_for('order_detail', order_id=order.id))
-
-            proof_error = validate_image_upload(proof_file)
-            if proof_error:
-                flash(proof_error, "error")
-                return redirect(url_for('order_detail', order_id=order.id))
-
-            proof_filename = save_delivery_proof(proof_file)
-            existing_proof = order.delivery_proof
-
-            if new_status == 'Delivered' and current_user.role != 'admin' and not proof_filename and not existing_proof:
-                flash("Please upload a delivery proof photo before marking this order delivered.", "error")
                 return redirect(url_for('order_detail', order_id=order.id))
 
             delivery.status = new_status
@@ -1611,21 +1895,12 @@ def order_detail(order_id):
                 delivery.tracking_note,
                 current_user
             )
-            if new_status == 'Delivered' and (proof_filename or existing_proof):
-                proof_note = tracking_note or delivery.tracking_note
-                if existing_proof:
-                    if proof_filename:
-                        existing_proof.image = proof_filename
-                    existing_proof.note = proof_note
-                    existing_proof.uploaded_by = current_user.id
-                    existing_proof.created_at = datetime.utcnow()
-                else:
-                    db.session.add(DeliveryProof(
-                        order_id=order.id,
-                        image=proof_filename,
-                        note=proof_note,
-                        uploaded_by=current_user.id
-                    ))
+            db.session.add(OrderMessage(
+                order_id=order.id,
+                sender_id=current_user.id,
+                receiver_id=order.buyer_id,
+                message=f"Tracking update: {new_status}. {delivery.tracking_note}"
+            ))
             db.session.add(Notification(
                 user_id=order.buyer_id,
                 message=f"Tracking updated for order #{order.id}: {new_status}"

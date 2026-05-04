@@ -98,6 +98,67 @@
   </div>
 </div>
 
+{% if farmer_ai_advice %}
+<div class="card ai-panel mb-6">
+  <div class="card-hd">
+    <span class="card-hd-title">AI Decision Support</span>
+    {% if farmer_ai_advice.risk_count %}
+      <span class="badge b-amber">{{ farmer_ai_advice.risk_count }} priority item{{ 's' if farmer_ai_advice.risk_count != 1 }}</span>
+    {% elif farmer_ai_advice.opportunity_count %}
+      <span class="badge b-blue">{{ farmer_ai_advice.opportunity_count }} opportunity</span>
+    {% else %}
+      <span class="badge b-green">Stable</span>
+    {% endif %}
+  </div>
+  <div class="card-body">
+    <div class="ai-summary">
+      <div>
+        <div class="ai-kicker">Current signal</div>
+        <div class="ai-title">{{ farmer_ai_advice.signal_label }}</div>
+        <div class="text-muted text-sm">{{ farmer_ai_advice.signal_detail }}</div>
+      </div>
+      <a href="{{ url_for('market_insights') }}" class="btn btn-secondary btn-sm">
+        <svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l3-3 4 4 5-7"/></svg>
+        Compare Market
+      </a>
+    </div>
+
+    {% if farmer_ai_advice.priority_items %}
+      <div class="ai-advice-list mt-4">
+        {% for item in farmer_ai_advice.priority_items %}
+          <div class="ai-advice-row ai-{{ item.tone }}">
+            <div class="ai-advice-main">
+              <div class="flex items-center gap-2">
+                {% if item.tone == 'danger' %}
+                  <span class="badge b-red">High Priority</span>
+                {% elif item.tone == 'warning' %}
+                  <span class="badge b-amber">Review</span>
+                {% elif item.tone == 'opportunity' %}
+                  <span class="badge b-blue">Opportunity</span>
+                {% elif item.tone == 'success' %}
+                  <span class="badge b-green">Healthy</span>
+                {% else %}
+                  <span class="badge b-gray">Monitor</span>
+                {% endif %}
+                <span class="font-bold">{{ item.product.name }}</span>
+              </div>
+              <div class="ai-advice-title">{{ item.title }}</div>
+              <div class="text-muted text-sm">{{ item.detail }}</div>
+              <div class="ai-next-step mt-2">{{ item.next_step }}</div>
+            </div>
+            <div class="ai-evidence">
+              {% for evidence in item.evidence %}
+                <span>{{ evidence }}</span>
+              {% endfor %}
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
 <!-- Products table -->
 <div class="card">
   <div class="card-hd">
@@ -141,7 +202,7 @@
         {% set available_stock = stock_info.available if stock_info else (p.quantity or 0) %}
         {% set reserved_stock = stock_info.reserved if stock_info else 0 %}
         <tr>
-          <td>
+          <td data-label="Product">
             <div class="flex items-center gap-3">
               {% if p.image %}
                 <img src="/static/uploads/{{ p.image }}" alt="{{ p.name }}"
@@ -152,7 +213,7 @@
               <span class="font-bold">{{ p.name }}</span>
             </div>
           </td>
-          <td>
+          <td data-label="Approval">
             {% if p.review.status == 'Approved' %}
               <span class="badge b-green">Approved</span>
             {% elif p.review.status == 'Rejected' %}
@@ -164,15 +225,15 @@
               <span class="badge b-amber">Pending Review</span>
             {% endif %}
           </td>
-          <td>
+          <td data-label="Quantity">
             {{ p.quantity|qty }} <span class="text-muted text-xs">{{ unit }}</span>
             <div class="text-muted text-xs">Available {{ available_stock|qty }} {{ unit }}</div>
             {% if reserved_stock %}
               <div class="text-muted text-xs">Reserved {{ reserved_stock|qty }} {{ unit }}</div>
             {% endif %}
           </td>
-          <td><span class="font-bold text-success">&#8369;{{ "%.2f"|format(p.price) }} / {{ unit }}</span></td>
-          <td>
+          <td data-label="Price"><span class="font-bold text-success">&#8369;{{ "%.2f"|format(p.price) }} / {{ unit }}</span></td>
+          <td data-label="Price Insight">
             {% if price_info.status == 'Fair Price' %}
               <span class="badge b-green">{{ price_info.status }}</span>
             {% elif price_info.status in ['Above Market', 'Below Market'] %}
@@ -186,18 +247,23 @@
                 | Avg: &#8369;{{ "%.2f"|format(price_info.avg_price) }} / {{ unit }}
               {% endif %}
             </div>
+            <div class="text-muted text-xs mt-1">{{ price_info.detail }}</div>
+            <div class="ai-inline-step mt-1">{{ price_info.next_step }}</div>
           </td>
-          <td>
+          <td data-label="AI Demand">
             {% set demand = demand_predictions.get(p.id, 'Not enough data') %}
             {% if demand == 'High Demand' %}
               <span class="badge b-green">{{ demand }}</span>
+              <div class="text-muted text-xs mt-1">Plan stock and fulfillment before demand catches up.</div>
             {% elif demand == 'Low Demand' %}
               <span class="badge b-amber">{{ demand }}</span>
+              <div class="text-muted text-xs mt-1">Review listing appeal, timing, and price position.</div>
             {% else %}
               <span class="badge b-gray">{{ demand }}</span>
+              <div class="text-muted text-xs mt-1">More orders are needed before the signal becomes strong.</div>
             {% endif %}
           </td>
-          <td>
+          <td data-label="Stock">
             {% if insight.stock_status == 'Out of Stock' %}
               <span class="badge b-red">{{ insight.stock_status }}</span>
             {% elif insight.stock_status == 'Low Stock' %}
@@ -208,8 +274,8 @@
               <span class="badge b-green">{{ insight.stock_status }}</span>
             {% endif %}
           </td>
-          <td>{{ insight.units_sold|qty }} <span class="text-muted text-xs">{{ unit }}</span></td>
-          <td>
+          <td data-label="Sold">{{ insight.units_sold|qty }} <span class="text-muted text-xs">{{ unit }}</span></td>
+          <td data-label="Suggested Action">
             {% if insight.suggested_action in ['Restock product', 'Restock soon'] %}
               <span class="badge b-red">{{ insight.suggested_action }}</span>
             {% elif insight.suggested_action in ['Promote product', 'Review price'] %}
@@ -220,7 +286,7 @@
               <span class="badge b-gray">{{ insight.suggested_action }}</span>
             {% endif %}
           </td>
-          <td>
+          <td data-label="Actions">
             <div class="flex items-center gap-2">
               <a href="{{ url_for('edit_product', product_id=p.id) }}" class="btn btn-secondary btn-sm">Edit</a>
               <form method="POST" action="{{ url_for('delete_product', product_id=p.id) }}" style="margin:0" onsubmit="return confirm('Delete this product? Pending orders will be rejected.');">
@@ -228,7 +294,7 @@
               </form>
             </div>
           </td>
-          <td class="text-muted text-sm" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ p.description or '—' }}</td>
+          <td data-label="Description" class="text-muted text-sm" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ p.description or '—' }}</td>
         </tr>
         {% endfor %}
       </tbody>

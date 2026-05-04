@@ -104,14 +104,16 @@
     </div>
   </div>
 
-  {% if recommended_products %}
+  {% if recommendation_details %}
   <div class="card">
     <div class="card-hd">
       <span class="card-hd-title">Recommended Products</span>
+      <span class="badge b-blue">AI matched</span>
     </div>
     <div class="card-body">
       <div style="display:grid;gap:16px">
-        {% for item in recommended_products %}
+        {% for recommendation in recommendation_details %}
+          {% set item = recommendation.product %}
           <div style="display:flex;gap:14px;align-items:flex-start;padding:12px;border:1px solid var(--border);border-radius:var(--r-md)">
             {% if item.image %}
               <img src="/static/uploads/{{ item.image }}" alt="{{ item.name }}"
@@ -131,6 +133,11 @@
                 &#8369;{{ "%.2f"|format(item.price) }} / {{ item.unit or 'unit' }}
               </div>
               <div class="text-muted text-xs mt-1">{{ (item.quantity or 0)|qty }} {{ item.unit or 'unit' }} available</div>
+              <div class="recommendation-reason mt-2">
+                <div class="font-bold">{{ recommendation.match_percent }}% match</div>
+                <div>{{ recommendation.reason }}</div>
+                <div class="text-muted mt-1">{{ recommendation.buyer_tip }}</div>
+              </div>
               <div class="mt-2">
                 <a href="{{ url_for('order', product_id=item.id) }}" class="btn btn-secondary">
                   View Product

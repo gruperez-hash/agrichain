@@ -1,175 +1,176 @@
-from collections import defaultdict
+{% extends 'base.html' %}
+{% block title %}Market Insights{% endblock %}
+{% block page_title %}Market Insights{% endblock %}
 
+{% block content %}
 
-def _to_float(value, default=0):
-    try:
-        return float(value or default)
-    except (TypeError, ValueError):
-        return default
+<div class="ph">
+  <div>
+    <div class="ph-title">Market Insights</div>
+    <div class="ph-sub">Current prices, demand trends, stock movement, and sales signals</div>
+  </div>
+  {% if current_user.role == 'farmer' %}
+    <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">
+      <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+      Dashboard
+    </a>
+  {% endif %}
+</div>
 
+<div class="grid g4 mb-6">
+  <div class="stat">
+    <div class="stat-icon si-green">
+      <svg viewBox="0 0 24 24"><path d="M3 3h18v18H3z"/><path d="M7 8h10"/><path d="M7 12h10"/><path d="M7 16h6"/></svg>
+    </div>
+    <div>
+      <div class="stat-lbl">Product Types</div>
+      <div class="stat-val">{{ market_summary.product_types }}</div>
+    </div>
+    <div class="stat-note text-muted">Grouped by product name and selling unit</div>
+  </div>
 
-def _to_int(value, default=0):
-    try:
-        return float(value or default)
-    except (TypeError, ValueError):
-        return default
+  <div class="stat">
+    <div class="stat-icon si-blue">
+      <svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><path d="M3.3 7L12 12l8.7-5"/></svg>
+    </div>
+    <div>
+      <div class="stat-lbl">Available Stock</div>
+      <div class="stat-val">{{ market_summary.total_stock|qty }}</div>
+    </div>
+    <div class="stat-note text-muted">Total listed quantity</div>
+  </div>
 
+  <div class="stat">
+    <div class="stat-icon si-amber">
+      <svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l3-3 4 4 5-7"/></svg>
+    </div>
+    <div>
+      <div class="stat-lbl">Quantity Sold</div>
+      <div class="stat-val">{{ market_summary.total_units_sold|qty }}</div>
+    </div>
+    <div class="stat-note text-muted">Based on transaction records</div>
+  </div>
 
-def _product_key(product):
-    name = (product.name or "").strip().lower()
-    unit = (getattr(product, "unit", None) or "unit").strip().lower()
-    return f"{name or f'product-{product.id}'}::{unit}"
+  <div class="stat">
+    <div class="stat-icon si-red">
+      <svg viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+    </div>
+    <div>
+      <div class="stat-lbl">Avg Price</div>
+      <div class="stat-val">&#8369;{{ "%.2f"|format(market_summary.average_market_price) }}</div>
+    </div>
+    <div class="stat-note text-muted">Average across product groups</div>
+  </div>
+</div>
 
+{% if market_rows %}
+<div class="card ai-panel mb-6">
+  <div class="card-hd">
+    <span class="card-hd-title">Market AI Signals</span>
+    <span class="badge b-blue">{{ market_summary.high_demand_count }} high-demand group{{ 's' if market_summary.high_demand_count != 1 }}</span>
+  </div>
+  <div class="card-body">
+    <div class="ai-advice-list">
+      {% for row in market_rows[:3] %}
+        <div class="ai-advice-row ai-neutral">
+          <div class="ai-advice-main">
+            <div class="flex items-center gap-2">
+              {% if row.demand_trend == 'High Demand' %}
+                <span class="badge b-green">{{ row.demand_trend }}</span>
+              {% elif row.demand_trend == 'Active Demand' %}
+                <span class="badge b-blue">{{ row.demand_trend }}</span>
+              {% else %}
+                <span class="badge b-gray">{{ row.demand_trend }}</span>
+              {% endif %}
+              <span class="font-bold">{{ row.name }}</span>
+            </div>
+            <div class="ai-advice-title">{{ row.market_action }}</div>
+            <div class="text-muted text-sm">{{ row.ai_reading }}</div>
+            <div class="ai-next-step mt-2">{{ row.next_step }}</div>
+          </div>
+          <div class="ai-evidence">
+            <span>&#8369;{{ "%.2f"|format(row.avg_price) }} / {{ row.unit }}</span>
+            <span>{{ row.total_stock|qty }} {{ row.unit }} stock</span>
+            <span>{{ row.order_count }} order{{ 's' if row.order_count != 1 }}</span>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
 
-def _demand_trend(order_count, units_sold):
-    if order_count >= 5 or units_sold >= 5:
-        return "High Demand"
-    if order_count > 0:
-        return "Active Demand"
-    return "Low Demand"
+<div class="card">
+  <div class="card-hd">
+    <span class="card-hd-title">Current Market Information</span>
+  </div>
 
+  {% if market_rows %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Product</th>
+          <th>Current Price</th>
+          <th>Price Range</th>
+          <th>Stock</th>
+          <th>Orders</th>
+          <th>Demand Trend</th>
+          <th>Market Action</th>
+          <th>AI Reading</th>
+          <th>Revenue</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in market_rows %}
+        <tr>
+          <td data-label="Product">
+            <div class="font-bold">{{ row.name }}</div>
+            <div class="text-muted text-xs">{{ row.listing_count }} listing{{ 's' if row.listing_count != 1 }} from {{ row.farmer_count }} farmer{{ 's' if row.farmer_count != 1 }}</div>
+          </td>
+          <td data-label="Current Price"><span class="font-bold text-success">&#8369;{{ "%.2f"|format(row.avg_price) }} / {{ row.unit }}</span></td>
+          <td data-label="Price Range" class="text-muted text-sm">&#8369;{{ "%.2f"|format(row.min_price) }} - &#8369;{{ "%.2f"|format(row.max_price) }} / {{ row.unit }}</td>
+          <td data-label="Stock">{{ row.total_stock|qty }} <span class="text-muted text-xs">{{ row.unit }}</span></td>
+          <td data-label="Orders">
+            <div class="font-bold">{{ row.order_count }}</div>
+            <div class="text-muted text-xs">{{ row.units_sold|qty }} {{ row.unit }} sold</div>
+          </td>
+          <td data-label="Demand Trend">
+            {% if row.demand_trend == 'High Demand' %}
+              <span class="badge b-green">{{ row.demand_trend }}</span>
+            {% elif row.demand_trend == 'Active Demand' %}
+              <span class="badge b-blue">{{ row.demand_trend }}</span>
+            {% else %}
+              <span class="badge b-gray">{{ row.demand_trend }}</span>
+            {% endif %}
+          </td>
+          <td data-label="Market Action">
+            {% if row.market_action == 'Increase supply' %}
+              <span class="badge b-red">{{ row.market_action }}</span>
+            {% elif row.market_action in ['Promote product', 'Monitor pricing'] %}
+              <span class="badge b-amber">{{ row.market_action }}</span>
+            {% elif row.market_action == 'Maintain supply' %}
+              <span class="badge b-green">{{ row.market_action }}</span>
+            {% else %}
+              <span class="badge b-gray">{{ row.market_action }}</span>
+            {% endif %}
+          </td>
+          <td data-label="AI Reading">
+            <div class="text-sm">{{ row.ai_reading }}</div>
+            <div class="ai-inline-step mt-1">{{ row.next_step }}</div>
+          </td>
+          <td data-label="Revenue"><span class="font-bold">&#8369;{{ "%.2f"|format(row.approved_revenue) }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="card-body" style="text-align:center;padding:48px 24px">
+    <div class="font-bold" style="margin-bottom:6px">No market data yet</div>
+    <div class="text-muted text-sm">Add products and transactions to generate price and demand insights.</div>
+  </div>
+  {% endif %}
+</div>
 
-def _market_action(demand_trend, total_stock):
-    if demand_trend == "High Demand" and total_stock <= 10:
-        return "Increase supply"
-    if demand_trend == "High Demand":
-        return "Maintain supply"
-    if demand_trend == "Active Demand":
-        return "Monitor pricing"
-    if total_stock >= 20:
-        return "Promote product"
-    return "Collect more data"
-
-
-def build_market_rows(products, orders):
-    orders_by_product = defaultdict(list)
-    for order in orders:
-        orders_by_product[order.product_id].append(order)
-
-    groups = {}
-    for product in products:
-        key = _product_key(product)
-        if key not in groups:
-            groups[key] = {
-                "key": key,
-                "name": product.name or "Unnamed Product",
-                "unit": product.unit or "unit",
-                "prices": [],
-                "total_stock": 0,
-                "listing_count": 0,
-                "farmer_count": set(),
-                "order_count": 0,
-                "units_sold": 0,
-                "approved_revenue": 0
-            }
-
-        group = groups[key]
-        group["prices"].append(_to_float(product.price))
-        group["total_stock"] += _to_int(product.quantity)
-        group["listing_count"] += 1
-
-        if product.farmer:
-            group["farmer_count"].add(product.farmer_id)
-
-        for order in orders_by_product.get(product.id, []):
-            status = (order.status or "").lower()
-            if status in {"cancelled", "rejected"}:
-                continue
-
-            group["order_count"] += 1
-            if status == "approved":
-                group["units_sold"] += _to_int(order.quantity)
-                group["approved_revenue"] += _to_float(order.total_price)
-
-    market_rows = []
-    for group in groups.values():
-        prices = group["prices"]
-        avg_price = sum(prices) / len(prices) if prices else 0
-        demand_trend = _demand_trend(group["order_count"], group["units_sold"])
-
-        market_rows.append({
-            "key": group["key"],
-            "name": group["name"],
-            "unit": group["unit"],
-            "avg_price": avg_price,
-            "min_price": min(prices) if prices else 0,
-            "max_price": max(prices) if prices else 0,
-            "total_stock": group["total_stock"],
-            "listing_count": group["listing_count"],
-            "farmer_count": len(group["farmer_count"]),
-            "order_count": group["order_count"],
-            "units_sold": group["units_sold"],
-            "approved_revenue": group["approved_revenue"],
-            "demand_trend": demand_trend,
-            "market_action": _market_action(demand_trend, group["total_stock"])
-        })
-
-    return sorted(
-        market_rows,
-        key=lambda row: (-row["units_sold"], -row["order_count"], row["name"].lower())
-    )
-
-
-def build_market_summary(market_rows):
-    if not market_rows:
-        return {
-            "product_types": 0,
-            "total_stock": 0,
-            "total_orders": 0,
-            "total_units_sold": 0,
-            "average_market_price": 0,
-            "high_demand_count": 0
-        }
-
-    return {
-        "product_types": len(market_rows),
-        "total_stock": sum(row["total_stock"] for row in market_rows),
-        "total_orders": sum(row["order_count"] for row in market_rows),
-        "total_units_sold": sum(row["units_sold"] for row in market_rows),
-        "average_market_price": (
-            sum(row["avg_price"] for row in market_rows) / len(market_rows)
-        ),
-        "high_demand_count": sum(
-            1 for row in market_rows if row["demand_trend"] == "High Demand"
-        )
-    }
-
-
-def build_price_insights(products, market_rows):
-    rows_by_key = {row["key"]: row for row in market_rows}
-    insights = {}
-
-    for product in products:
-        row = rows_by_key.get(_product_key(product))
-        current_price = _to_float(product.price)
-
-        if not row or row["listing_count"] < 2 or row["avg_price"] <= 0:
-            insights[product.id] = {
-                "status": "No comparison yet",
-                "avg_price": row["avg_price"] if row else 0,
-                "difference": 0,
-                "suggestion": "Collect more market data"
-            }
-            continue
-
-        avg_price = row["avg_price"]
-        difference = ((current_price - avg_price) / avg_price) * 100
-
-        if current_price > avg_price * 1.15:
-            status = "Above Market"
-            suggestion = "Review price"
-        elif current_price < avg_price * 0.85:
-            status = "Below Market"
-            suggestion = "Possible price increase"
-        else:
-            status = "Fair Price"
-            suggestion = "Keep current price"
-
-        insights[product.id] = {
-            "status": status,
-            "avg_price": avg_price,
-            "difference": difference,
-            "suggestion": suggestion
-        }
-
-    return insights
+{% endblock %}
