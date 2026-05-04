@@ -53,14 +53,14 @@
       <tbody>
         {% for row in market_rows %}
         <tr>
-          <td>
+          <td data-label="Product">
             <div class="font-bold">{{ row.name }}</div>
             <div class="text-muted text-xs">Avg price: &#8369;{{ "%.2f"|format(row.avg_price) }} / {{ row.unit }}</div>
           </td>
-          <td>{{ row.order_count }}</td>
-          <td>{{ row.units_sold|qty }} {{ row.unit }}</td>
-          <td>{{ row.total_stock|qty }} {{ row.unit }}</td>
-          <td>
+          <td data-label="Orders">{{ row.order_count }}</td>
+          <td data-label="Qty Sold">{{ row.units_sold|qty }} {{ row.unit }}</td>
+          <td data-label="Stock">{{ row.total_stock|qty }} {{ row.unit }}</td>
+          <td data-label="Demand">
             {% if row.demand_trend == 'High Demand' %}
               <span class="badge b-green">{{ row.demand_trend }}</span>
             {% elif row.demand_trend == 'Active Demand' %}
@@ -69,7 +69,7 @@
               <span class="badge b-gray">{{ row.demand_trend }}</span>
             {% endif %}
           </td>
-          <td><span class="font-bold text-success">&#8369;{{ "%.2f"|format(row.approved_revenue) }}</span></td>
+          <td data-label="Revenue"><span class="font-bold text-success">&#8369;{{ "%.2f"|format(row.approved_revenue) }}</span></td>
         </tr>
         {% endfor %}
       </tbody>

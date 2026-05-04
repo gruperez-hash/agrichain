@@ -157,6 +157,20 @@
     {% endif %}
   </div>
 </div>
+{% else %}
+<div class="card mb-6">
+  <div class="card-hd">
+    <span class="card-hd-title">AI Decision Support</span>
+    <span class="badge b-gray">Unavailable</span>
+  </div>
+  <div class="card-body text-muted text-sm" style="text-align:center;padding:28px 24px">
+    <div style="font-size:32px;margin-bottom:8px">🧠</div>
+    AI insights could not be generated yet. Add more products and complete a few orders for the signal to activate.
+    <div class="mt-3">
+      <a href="{{ url_for('market_insights') }}" class="btn btn-secondary btn-sm">View Market Data</a>
+    </div>
+  </div>
+</div>
 {% endif %}
 
 <!-- Products table -->

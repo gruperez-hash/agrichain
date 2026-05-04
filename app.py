@@ -1275,7 +1275,7 @@ def dashboard():
     earnings = sum((o.total_price or 0) for o in orders if o.status == 'Approved')
 
     all_products = Product.query.filter_by(is_deleted=False).all()
-    all_orders = Order.query.all()
+    all_orders = Order.query.filter(Order.status != 'Cancelled').all()
     demand_artifact = load_demand_artifact(app.config.get('DEMAND_MODEL_PATH'))
     if demand_artifact is None:
         demand_artifact = train_demand_model(all_products, all_orders)
@@ -1313,7 +1313,7 @@ def dashboard():
 @login_required
 def admin():
     if current_user.role != 'admin':
-        return redirect('/login')
+        return redirect(url_for('marketplace'))
 
     products = Product.query.order_by(Product.id.desc()).all()
     ensure_product_reviews(products)
