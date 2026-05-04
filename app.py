@@ -294,6 +294,7 @@ app = Flask(__name__, static_folder='Static', static_url_path='/static')
 app.config.from_object(Config)
 
 from ai_routes import ai_bp
+from ai_service import load_models as _load_ai_models
 app.register_blueprint(ai_bp)
 
 DELIVERY_STATUSES = [
@@ -2135,4 +2136,5 @@ def approve_order(order_id):
 if __name__ == '__main__':
     with app.app_context():
         ensure_database_ready()
+        _load_ai_models()   # Pre-load XGBoost models so AI is ready on first request
     app.run(debug=True)
