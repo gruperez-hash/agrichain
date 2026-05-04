@@ -28,6 +28,7 @@
           <th>Total</th>
           <th>Payment</th>
           <th>AI Risk</th>
+          <th>Complaint Risk</th>
           <th>Status</th>
           <th>Tracking</th>
           <th>Action</th>
@@ -75,6 +76,21 @@
                   data-qty="{{ o.quantity or 1 }}"
                   data-total="{{ o.total_price or 0 }}"
                   data-payment="{{ o.payment_method or 'COD' }}"
+                  style="font-size:11px;padding:3px 8px">
+              <span style="color:var(--muted);font-style:italic;font-size:11px">checking…</span>
+            </span>
+            {% else %}
+              <span class="badge b-gray" style="font-size:11px">N/A</span>
+            {% endif %}
+          </td>
+          <td>
+            {# Complaint Risk Badge — loaded client-side via data attributes #}
+            {% if o.status == 'Pending' %}
+            <span class="ai-complaint-badge"
+                  data-product="{{ o.product.name }}"
+                  data-total="{{ o.total_price or 0 }}"
+                  data-payment="{{ o.payment_method or 'COD' }}"
+                  data-days="3"
                   style="font-size:11px;padding:3px 8px">
               <span style="color:var(--muted);font-style:italic;font-size:11px">checking…</span>
             </span>
@@ -151,12 +167,10 @@
 
 {% block scripts %}
 <script>
-/* ── AI Risk Badges: batch-check all pending orders on page load ─────────── */
 document.addEventListener('DOMContentLoaded', function () {
-  const badges = document.querySelectorAll('.ai-risk-badge');
-  if (!badges.length) return;
 
-  badges.forEach(function (badge) {
+  /* ── AI Risk Badges ───────────────────────────────────────────────────── */
+  document.querySelectorAll('.ai-risk-badge').forEach(function (badge) {
     const payload = {
       product_name:    badge.dataset.product,
       farmer_location: badge.dataset.farmerLoc,
@@ -166,27 +180,46 @@ document.addEventListener('DOMContentLoaded', function () {
       total_price:     parseFloat(badge.dataset.total)  || 0,
       payment_method:  badge.dataset.payment || 'COD'
     };
-
     fetch('/api/v1/ai/check-risk', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(payload)
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
     })
-    .then(function (r) { return r.json(); })
-    .then(function (data) {
+    .then(r => r.json())
+    .then(data => {
       if (data.is_risk === 1) {
-        badge.innerHTML =
-          '<span class="badge b-red" title="AI: ' + Math.round(data.risk_probability * 100) + '% cancellation risk">' +
-          '⚠ High Risk ' + Math.round(data.risk_probability * 100) + '%</span>';
+        const pct = Math.round(data.risk_probability * 100);
+        badge.innerHTML = '<span class="badge b-red" title="AI: ' + pct + '% cancellation risk">⚠ High Risk ' + pct + '%</span>';
       } else {
-        badge.innerHTML =
-          '<span class="badge b-green" title="AI: Low cancellation risk">✓ Safe</span>';
+        badge.innerHTML = '<span class="badge b-green" title="AI: Low cancellation risk">✓ Safe</span>';
       }
     })
-    .catch(function () {
-      badge.innerHTML = '<span class="badge b-gray" style="font-size:11px">AI N/A</span>';
-    });
+    .catch(() => { badge.innerHTML = '<span class="badge b-gray" style="font-size:11px">AI N/A</span>'; });
   });
+
+  /* ── AI Complaint Risk Badges ─────────────────────────────────────────── */
+  document.querySelectorAll('.ai-complaint-badge').forEach(function (badge) {
+    const payload = {
+      product_name:    badge.dataset.product,
+      total_price:     parseFloat(badge.dataset.total)   || 0,
+      payment_method:  badge.dataset.payment || 'COD',
+      delivery_days:   parseInt(badge.dataset.days)      || 3
+    };
+    fetch('/api/v1/ai/check-complaint', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+    .then(r => r.json())
+    .then(data => {
+      const pct = Math.round(data.complaint_probability * 100);
+      if (data.will_complain === 1) {
+        badge.innerHTML = '<span class="badge b-amber" title="AI: ' + pct + '% complaint likelihood">💬 ' + pct + '% likely</span>';
+      } else {
+        badge.innerHTML = '<span class="badge b-green" title="AI: Low complaint risk">✓ Low risk</span>';
+      }
+    })
+    .catch(() => { badge.innerHTML = '<span class="badge b-gray" style="font-size:11px">AI N/A</span>'; });
+  });
+
 });
 </script>
 {% endblock %}

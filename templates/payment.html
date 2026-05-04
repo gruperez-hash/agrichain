@@ -85,6 +85,17 @@
           </div>
         </div>
 
+        {# AI Complaint Warning — shown if complaint risk is high #}
+        <div id="ai-complaint-warning" style="display:none;margin-bottom:16px;padding:12px 16px;border-radius:var(--r-md);border-left:4px solid #f59e0b;background:#fffbeb">
+          <div style="display:flex;align-items:flex-start;gap:10px">
+            <span style="font-size:18px;line-height:1">&#x26A0;&#xFE0F;</span>
+            <div>
+              <div class="font-bold text-sm" style="color:#92400e">AI Quality Notice</div>
+              <div class="text-sm" id="ai-complaint-text" style="color:#78350f;margin-top:2px"></div>
+            </div>
+          </div>
+        </div>
+
         <button type="submit" class="btn btn-primary btn-block btn-lg">
           <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
           <span id="confirmOrderText">Confirm COD Order - &#8369;{{ "%.2f"|format((product.price or 0) * default_qty) }}</span>
@@ -166,6 +177,48 @@ function updateOrderTotal() {
 if (orderQuantityInput) {
   orderQuantityInput.addEventListener('input', updateOrderTotal);
   updateOrderTotal();
+}
+
+/* ── AI Complaint Risk Check ─────────────────────────────────────────── */
+const aiComplaintWarning = document.getElementById('ai-complaint-warning');
+const aiComplaintText    = document.getElementById('ai-complaint-text');
+const productName = {{ (product.name or '')|tojson }};
+let _complaintTimer = null;
+
+function runComplaintCheck() {
+  const qty   = parseFloat(orderQuantityInput.value || 1);
+  const total = unitPrice * qty;
+  if (!total || !productName) return;
+
+  fetch('/api/v1/ai/check-complaint', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      product_name:   productName,
+      total_price:    total,
+      payment_method: 'COD',
+      delivery_days:  3
+    })
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.will_complain === 1 && data.complaint_probability > 0.60) {
+      const pct = Math.round(data.complaint_probability * 100);
+      aiComplaintText.textContent = 'Our AI estimates a ' + pct + '% chance of a quality complaint for this order. Consider reviewing the product details or contacting the seller before confirming.';
+      aiComplaintWarning.style.display = 'block';
+    } else {
+      aiComplaintWarning.style.display = 'none';
+    }
+  })
+  .catch(() => { aiComplaintWarning.style.display = 'none'; });
+}
+
+if (orderQuantityInput) {
+  orderQuantityInput.addEventListener('input', () => {
+    clearTimeout(_complaintTimer);
+    _complaintTimer = setTimeout(runComplaintCheck, 700);
+  });
+  setTimeout(runComplaintCheck, 800); // initial check on page load
 }
 </script>
 {% endblock %}

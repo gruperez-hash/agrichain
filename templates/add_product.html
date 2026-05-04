@@ -60,6 +60,17 @@
         </div>
 
         <div class="form-group">
+          <label class="form-label">Product Type</label>
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 14px;border:1px solid var(--border);border-radius:var(--r-md);transition:border-color .15s">
+            <input type="checkbox" id="is_organic" name="is_organic" value="1" style="width:18px;height:18px;accent-color:var(--accent);cursor:pointer" {{ 'checked' if product and product.description and 'organic' in product.description.lower() else '' }}>
+            <span>
+              <span class="font-bold text-sm">🌿 Organic Product</span>
+              <span class="text-muted text-xs" style="display:block">Check if this product is organically grown — improves AI price accuracy</span>
+            </span>
+          </label>
+        </div>
+
+        <div class="form-group">
           <label class="form-label" for="description">Description</label>
           <textarea class="form-control" id="description" name="description" placeholder="Describe freshness, variety, harvest date, farming method..." rows="4">{{ product.description if product else '' }}</textarea>
         </div>
@@ -114,6 +125,10 @@
 {% endblock %}
 
 {% block scripts %}
+<script>
+/* Farmer location injected from server — used by AI price simulation */
+const FARMER_LOCATION = {{ current_user.location | tojson }};
+</script>
 <script>
 /* ── Image upload helpers ─────────────────────────────────────────────────── */
 function previewImage(input) {
@@ -223,7 +238,9 @@ function runAiPriceCheck() {
       product_name:   name,
       proposed_price: price,
       quantity:       qty,
-      payment_method: 'COD'
+      farmer_location: FARMER_LOCATION,
+      payment_method: 'COD',
+      is_organic:     document.getElementById('is_organic').checked ? 1 : 0
     })
   })
   .then(r => r.json())

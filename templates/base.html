@@ -120,6 +120,10 @@
             Complaints
           </a>
         {% endif %}
+        <div id="sb-ai-status" style="display:flex;align-items:center;gap:8px;padding:8px 12px;font-size:12px;color:var(--muted);border-radius:var(--r-md)">
+          <span id="sb-ai-dot" style="width:8px;height:8px;border-radius:50%;background:#9ca3af;flex-shrink:0;transition:background .3s"></span>
+          <span id="sb-ai-label">AI checking…</span>
+        </div>
       </div>
 
       <div class="sb-footer">
@@ -478,6 +482,27 @@
         productSearchInput.blur();
       }
     });
+  }
+
+  /* ── AI sidebar health dot ───────────────────────────────────────────── */
+  const sbDot   = document.getElementById('sb-ai-dot');
+  const sbLabel = document.getElementById('sb-ai-label');
+  if (sbDot && sbLabel) {
+    fetch('/api/v1/ai/status')
+      .then(r => r.json())
+      .then(data => {
+        if (data.ai_ready) {
+          sbDot.style.background = '#22c55e';
+          sbLabel.textContent    = 'AI Online';
+        } else {
+          sbDot.style.background = '#ef4444';
+          sbLabel.textContent    = 'AI Offline';
+        }
+      })
+      .catch(() => {
+        sbDot.style.background = '#f59e0b';
+        sbLabel.textContent    = 'AI Unavailable';
+      });
   }
 </script>
 
