@@ -49,10 +49,6 @@
             <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
             Analytics
           </a>
-          <a href="{{ url_for('market_insights') }}" class="{{ 'active' if request.endpoint == 'market_insights' }}">
-            <svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l3-3 4 4 5-7"/></svg>
-            Market Insights
-          </a>
           <a href="{{ url_for('crop_news') }}" class="{{ 'active' if request.endpoint == 'crop_news' }}">
             <svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/><path d="M9 7h7"/><path d="M9 11h7"/><path d="M9 15h4"/></svg>
             Crop News
@@ -70,10 +66,6 @@
           <a href="{{ url_for('orders') }}" class="{{ 'active' if request.endpoint == 'orders' }}">
             <svg viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><polyline points="9,22 9,12 15,12 15,22"/></svg>
             My Orders
-          </a>
-          <a href="{{ url_for('market_insights') }}" class="{{ 'active' if request.endpoint == 'market_insights' }}">
-            <svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l3-3 4 4 5-7"/></svg>
-            Market Insights
           </a>
           <a href="{{ url_for('crop_news') }}" class="{{ 'active' if request.endpoint == 'crop_news' }}">
             <svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/><path d="M9 7h7"/><path d="M9 11h7"/><path d="M9 15h4"/></svg>
@@ -185,7 +177,6 @@
         {% elif current_user.role == 'buyer' %}
           <a href="{{ url_for('marketplace') }}" class="{{ 'active' if request.endpoint == 'marketplace' }}" title="Marketplace"><svg viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 01-8 0"/></svg><span>Marketplace</span></a>
           <a href="{{ url_for('orders') }}" class="{{ 'active' if request.endpoint == 'orders' }}" title="My Orders"><svg viewBox="0 0 24 24"><path d="M6 2l1.5 4h9L18 2"/><path d="M4 6h16l-1.5 14h-13L4 6z"/><path d="M9 11h6"/></svg><span>My Orders</span></a>
-          <a href="{{ url_for('market_insights') }}" class="{{ 'active' if request.endpoint == 'market_insights' }}" title="Market Insights"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l3-3 4 4 5-7"/></svg><span>Market</span></a>
           <a href="{{ url_for('crop_news') }}" class="{{ 'active' if request.endpoint == 'crop_news' }}" title="Crop News"><svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/><path d="M9 7h7"/><path d="M9 11h7"/><path d="M9 15h4"/></svg><span>Crop News</span></a>
         {% elif current_user.role == 'admin' %}
           <a href="{{ url_for('admin') }}#products" class="{{ 'active' if request.endpoint == 'admin' }}" title="Products"><svg viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><path d="M3 6h18"/></svg><span>Products</span></a>
@@ -352,10 +343,6 @@
     <a href="{{ url_for('orders') }}" class="{{ 'active' if request.endpoint == 'orders' }}" title="My Orders">
       <svg viewBox="0 0 24 24"><path d="M20 7H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2z"/></svg>
       Orders
-    </a>
-    <a href="{{ url_for('market_insights') }}" class="{{ 'active' if request.endpoint == 'market_insights' }}" title="Market Insights">
-      <svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l3-3 4 4 5-7"/></svg>
-      Market
     </a>
     <a href="{{ url_for('notifications') }}" class="{{ 'active' if request.endpoint == 'notifications' }}" title="Notifications">
       <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
