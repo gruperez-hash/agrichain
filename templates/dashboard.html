@@ -174,7 +174,7 @@
 {% endif %}
 
 <!-- Products table -->
-<div class="card">
+<div class="card seller-products-card">
   <div class="card-hd">
     <span class="card-hd-title">Your Products</span>
     <div class="flex items-center gap-2">
@@ -190,7 +190,7 @@
   </div>
 
   {% if products %}
-  <div class="table-wrap">
+  <div class="table-wrap seller-products-table">
     <table>
       <thead>
         <tr>
@@ -228,54 +228,62 @@
             </div>
           </td>
           <td data-label="Approval">
-            {% if p.review.status == 'Approved' %}
-              <span class="badge b-green">Approved</span>
-            {% elif p.review.status == 'Rejected' %}
-              <span class="badge b-red">Rejected</span>
-              {% if p.review.admin_note %}
-                <div class="text-muted text-xs mt-1">{{ p.review.admin_note }}</div>
+            <div class="seller-cell-stack">
+              {% if p.review.status == 'Approved' %}
+                <span class="badge b-green">Approved</span>
+              {% elif p.review.status == 'Rejected' %}
+                <span class="badge b-red">Rejected</span>
+                {% if p.review.admin_note %}
+                  <div class="text-muted text-xs mt-1">{{ p.review.admin_note }}</div>
+                {% endif %}
+              {% else %}
+                <span class="badge b-amber">Pending Review</span>
               {% endif %}
-            {% else %}
-              <span class="badge b-amber">Pending Review</span>
-            {% endif %}
+            </div>
           </td>
           <td data-label="Quantity">
-            {{ p.quantity|qty }} <span class="text-muted text-xs">{{ unit }}</span>
-            <div class="text-muted text-xs">Available {{ available_stock|qty }} {{ unit }}</div>
-            {% if reserved_stock %}
-              <div class="text-muted text-xs">Reserved {{ reserved_stock|qty }} {{ unit }}</div>
-            {% endif %}
+            <div class="seller-cell-stack">
+              <div><span class="font-bold">{{ p.quantity|qty }}</span> <span class="text-muted text-xs">{{ unit }}</span></div>
+              <div class="text-muted text-xs">Available {{ available_stock|qty }} {{ unit }}</div>
+              {% if reserved_stock %}
+                <div class="text-muted text-xs">Reserved {{ reserved_stock|qty }} {{ unit }}</div>
+              {% endif %}
+            </div>
           </td>
           <td data-label="Price"><span class="font-bold text-success">&#8369;{{ "%.2f"|format(p.price) }} / {{ unit }}</span></td>
           <td data-label="Price Insight">
-            {% if price_info.status == 'Fair Price' %}
-              <span class="badge b-green">{{ price_info.status }}</span>
-            {% elif price_info.status in ['Above Market', 'Below Market'] %}
-              <span class="badge b-amber">{{ price_info.status }}</span>
-            {% else %}
-              <span class="badge b-gray">{{ price_info.status }}</span>
-            {% endif %}
-            <div class="text-muted text-xs mt-1">
-              {{ price_info.suggestion }}
-              {% if price_info.avg_price %}
-                | Avg: &#8369;{{ "%.2f"|format(price_info.avg_price) }} / {{ unit }}
+            <div class="seller-cell-stack seller-insight-stack">
+              {% if price_info.status == 'Fair Price' %}
+                <span class="badge b-green">{{ price_info.status }}</span>
+              {% elif price_info.status in ['Above Market', 'Below Market'] %}
+                <span class="badge b-amber">{{ price_info.status }}</span>
+              {% else %}
+                <span class="badge b-gray">{{ price_info.status }}</span>
               {% endif %}
+              <div class="text-muted text-xs mt-1">
+                {{ price_info.suggestion }}
+                {% if price_info.avg_price %}
+                  | Avg: &#8369;{{ "%.2f"|format(price_info.avg_price) }} / {{ unit }}
+                {% endif %}
+              </div>
+              <div class="text-muted text-xs mt-1">{{ price_info.detail }}</div>
+              <div class="ai-inline-step mt-1">{{ price_info.next_step }}</div>
             </div>
-            <div class="text-muted text-xs mt-1">{{ price_info.detail }}</div>
-            <div class="ai-inline-step mt-1">{{ price_info.next_step }}</div>
           </td>
           <td data-label="AI Demand">
-            {% set demand = demand_predictions.get(p.id, 'Not enough data') %}
-            {% if demand == 'High Demand' %}
-              <span class="badge b-green">{{ demand }}</span>
-              <div class="text-muted text-xs mt-1">Plan stock and fulfillment before demand catches up.</div>
-            {% elif demand == 'Low Demand' %}
-              <span class="badge b-amber">{{ demand }}</span>
-              <div class="text-muted text-xs mt-1">Review listing appeal, timing, and price position.</div>
-            {% else %}
-              <span class="badge b-gray">{{ demand }}</span>
-              <div class="text-muted text-xs mt-1">More orders are needed before the signal becomes strong.</div>
-            {% endif %}
+            <div class="seller-cell-stack seller-insight-stack">
+              {% set demand = demand_predictions.get(p.id, 'Not enough data') %}
+              {% if demand == 'High Demand' %}
+                <span class="badge b-green">{{ demand }}</span>
+                <div class="text-muted text-xs mt-1">Plan stock and fulfillment before demand catches up.</div>
+              {% elif demand == 'Low Demand' %}
+                <span class="badge b-amber">{{ demand }}</span>
+                <div class="text-muted text-xs mt-1">Review listing appeal, timing, and price position.</div>
+              {% else %}
+                <span class="badge b-gray">{{ demand }}</span>
+                <div class="text-muted text-xs mt-1">More orders are needed before the signal becomes strong.</div>
+              {% endif %}
+            </div>
           </td>
           <td data-label="Stock">
             {% if insight.stock_status == 'Out of Stock' %}
