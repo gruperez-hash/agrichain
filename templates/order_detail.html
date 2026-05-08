@@ -322,6 +322,11 @@
                   <span class="text-muted text-xs">{{ msg.created_at.strftime('%b %d, %I:%M %p') }}</span>
                 </div>
                 <div class="text-sm mt-2">{{ msg.message }}</div>
+                {% if msg.image %}
+                  <a href="/static/uploads/{{ msg.image }}" target="_blank" rel="noopener" class="message-attachment">
+                    <img src="/static/uploads/{{ msg.image }}" alt="Tracking photo for order #{{ order.id }}">
+                  </a>
+                {% endif %}
               </div>
             {% endfor %}
           {% else %}
