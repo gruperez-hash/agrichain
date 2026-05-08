@@ -1,6 +1,6 @@
 from flask import Flask, Response, jsonify, render_template, request, redirect, url_for, flash
 from config import Config
-from models import Complaint, OrderDelivery, OrderMessage, OrderTimeline, ProductRating, ProductReview
+from models import Complaint, DeliveryProof, OrderDelivery, OrderMessage, OrderTimeline, ProductRating, ProductReview
 from models import db, User, Product, Order, Notification  # ✅ Added Notification
 from flask_login import LoginManager, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -585,6 +585,10 @@ def ensure_product_unit_schema():
 
         if 'order' in table_names and db.engine.dialect.name == 'mysql':
             connection.execute(text("ALTER TABLE `order` MODIFY quantity FLOAT"))
+
+        if 'order_message' in table_names:
+            order_message_columns = {column['name'] for column in inspector.get_columns('order_message')}
+            add_column_if_missing(connection, 'order_message', order_message_columns, 'image', "VARCHAR(200)")
 
 app.jinja_env.filters['qty'] = format_quantity
 
@@ -1216,18 +1220,145 @@ def analytics():
     if current_user.role != 'farmer':
         return redirect('/marketplace')
 
-    orders = Order.query.all()
-    products = Product.query.filter_by(is_deleted=False).all()
-    market_rows = build_market_rows(products, orders)
-    market_summary = build_market_summary(market_rows)
-    total_sales = sum((o.total_price or 0) for o in orders if o.status == 'Approved')
+    def pct(value, maximum):
+        if not maximum:
+            return 0
+        return min(round((float(value or 0) / float(maximum)) * 100), 100)
+
+    products = Product.query.filter_by(farmer_id=current_user.id, is_deleted=False).all()
+    product_ids = [product.id for product in products]
+    orders = (
+        Order.query.filter(Order.product_id.in_(product_ids)).all()
+        if product_ids else []
+    )
+    approved_orders = [
+        order for order in orders
+        if (order.status or '').lower() == 'approved'
+    ]
+
+    market_products = Product.query.filter_by(is_deleted=False).all()
+    market_orders = Order.query.all()
+    seller_rows = build_market_rows(products, orders)
+    market_rows = build_market_rows(market_products, market_orders)
+    market_rows_by_key = {
+        row.get('key') or f"{row['name'].lower()}::{row['unit'].lower()}": row
+        for row in market_rows
+    }
+
+    total_sales = sum((order.total_price or 0) for order in approved_orders)
     total_orders = len(orders)
+    total_units_sold = sum(row['units_sold'] for row in seller_rows)
+    total_stock = sum(row['total_stock'] for row in seller_rows)
+    average_order_value = total_sales / len(approved_orders) if approved_orders else 0
+
+    max_revenue = max([row['approved_revenue'] for row in seller_rows] + [1])
+    max_orders = max([row['order_count'] for row in seller_rows] + [1])
+    max_quantity = max(
+        [max(row['total_stock'], row['units_sold']) for row in seller_rows] + [1]
+    )
+
+    chart_rows = []
+    for row in seller_rows:
+        row_key = row.get('key') or f"{row['name'].lower()}::{row['unit'].lower()}"
+        market_row = market_rows_by_key.get(row_key)
+        market_avg_price = market_row['avg_price'] if market_row else 0
+        price_difference = (
+            ((row['avg_price'] - market_avg_price) / market_avg_price) * 100
+            if market_avg_price else 0
+        )
+
+        if not market_row or market_avg_price <= 0 or market_row.get('listing_count', 0) <= 1:
+            price_position = 'No comparison'
+            price_tone = 'gray'
+        elif price_difference > 15:
+            price_position = 'Above market'
+            price_tone = 'amber'
+        elif price_difference < -15:
+            price_position = 'Below market'
+            price_tone = 'blue'
+        else:
+            price_position = 'Fair price'
+            price_tone = 'green'
+
+        price_meter_pct = 50
+        if market_avg_price:
+            price_meter_pct = max(0, min(round(50 + price_difference), 100))
+
+        chart_rows.append({
+            **row,
+            'revenue_pct': pct(row['approved_revenue'], max_revenue),
+            'orders_pct': pct(row['order_count'], max_orders),
+            'sold_pct': pct(row['units_sold'], max_quantity),
+            'stock_pct': pct(row['total_stock'], max_quantity),
+            'market_avg_price': market_avg_price,
+            'price_difference': price_difference,
+            'price_position': price_position,
+            'price_tone': price_tone,
+            'price_meter_pct': price_meter_pct
+        })
+
+    status_counts = {
+        'Approved': sum(1 for order in orders if order.status == 'Approved'),
+        'Pending': sum(1 for order in orders if order.status == 'Pending'),
+        'Closed': sum(1 for order in orders if order.status in CLOSED_ORDER_STATUSES)
+    }
+    max_status_count = max(list(status_counts.values()) + [1])
+    order_status_chart = [
+        {'label': 'Approved', 'count': status_counts['Approved'], 'pct': pct(status_counts['Approved'], max_status_count), 'tone': 'green'},
+        {'label': 'Pending', 'count': status_counts['Pending'], 'pct': pct(status_counts['Pending'], max_status_count), 'tone': 'amber'},
+        {'label': 'Closed', 'count': status_counts['Closed'], 'pct': pct(status_counts['Closed'], max_status_count), 'tone': 'red'}
+    ]
+
+    demand_counts = {
+        'High Demand': sum(1 for row in seller_rows if row['demand_trend'] == 'High Demand'),
+        'Active Demand': sum(1 for row in seller_rows if row['demand_trend'] == 'Active Demand'),
+        'Low Demand': sum(1 for row in seller_rows if row['demand_trend'] == 'Low Demand')
+    }
+    max_demand_count = max(list(demand_counts.values()) + [1])
+    demand_chart = [
+        {'label': 'High Demand', 'count': demand_counts['High Demand'], 'pct': pct(demand_counts['High Demand'], max_demand_count), 'tone': 'green'},
+        {'label': 'Active Demand', 'count': demand_counts['Active Demand'], 'pct': pct(demand_counts['Active Demand'], max_demand_count), 'tone': 'blue'},
+        {'label': 'Low Demand', 'count': demand_counts['Low Demand'], 'pct': pct(demand_counts['Low Demand'], max_demand_count), 'tone': 'gray'}
+    ]
+
+    current_month = datetime.utcnow().month
+    current_year = datetime.utcnow().year
+    trend_months = []
+    for offset in range(5, -1, -1):
+        month = current_month - offset
+        year = current_year
+        while month <= 0:
+            month += 12
+            year -= 1
+        month_date = datetime(year, month, 1)
+        trend_months.append({
+            'key': month_date.strftime('%Y-%m'),
+            'label': month_date.strftime('%b'),
+            'revenue': 0
+        })
+
+    trend_by_key = {month['key']: month for month in trend_months}
+    for order in approved_orders:
+        order_date = order.created_at or datetime.utcnow()
+        order_key = order_date.strftime('%Y-%m')
+        if order_key in trend_by_key:
+            trend_by_key[order_key]['revenue'] += order.total_price or 0
+
+    max_trend_revenue = max([month['revenue'] for month in trend_months] + [1])
+    for month in trend_months:
+        month['pct'] = pct(month['revenue'], max_trend_revenue)
+
     return render_template(
         'analytics.html',
         total_sales=total_sales,
         total_orders=total_orders,
-        market_rows=market_rows,
-        market_summary=market_summary
+        total_units_sold=total_units_sold,
+        total_stock=total_stock,
+        average_order_value=average_order_value,
+        chart_rows=chart_rows,
+        order_status_chart=order_status_chart,
+        demand_chart=demand_chart,
+        trend_months=trend_months
     )
 
 @app.route('/market_insights')
@@ -1235,6 +1366,8 @@ def analytics():
 def market_insights():
     if current_user.role == 'admin':
         return redirect(url_for('admin') + '#reports')
+    if current_user.role != 'farmer':
+        return redirect(url_for('marketplace'))
 
     products = Product.query.filter_by(is_deleted=False).all()
     orders = Order.query.all()
@@ -1883,28 +2016,55 @@ def order_detail(order_id):
 
             new_status = request.form.get('delivery_status')
             tracking_note = request.form.get('tracking_note', '').strip()
+            proof_file = request.files.get('proof_image')
 
             if new_status not in DELIVERY_STATUSES:
                 flash("Invalid delivery status.", "error")
                 return redirect(url_for('order_detail', order_id=order.id))
 
+            proof_required = new_status == 'Delivered' and not order.delivery_proof
+            image_error = validate_image_upload(proof_file, required=proof_required)
+            if image_error:
+                flash(image_error, "error")
+                return redirect(url_for('order_detail', order_id=order.id))
+
+            proof_image = save_image_file(proof_file, 'delivery_proofs') if proof_file and proof_file.filename != '' else None
             delivery.status = new_status
             delivery.tracking_note = tracking_note or f"Tracking updated to {new_status}."
+
+            if proof_image:
+                if order.delivery_proof:
+                    order.delivery_proof.image = proof_image
+                    order.delivery_proof.note = delivery.tracking_note
+                    order.delivery_proof.uploaded_by = current_user.id
+                    order.delivery_proof.created_at = datetime.utcnow()
+                else:
+                    db.session.add(DeliveryProof(
+                        order_id=order.id,
+                        image=proof_image,
+                        note=delivery.tracking_note,
+                        uploaded_by=current_user.id
+                    ))
+
             add_order_timeline(
                 order,
                 new_status,
                 delivery.tracking_note,
                 current_user
             )
+            buyer_message = f"Tracking update: {new_status}. {delivery.tracking_note}"
+            if proof_image:
+                buyer_message += " Photo attached."
             db.session.add(OrderMessage(
                 order_id=order.id,
                 sender_id=current_user.id,
                 receiver_id=order.buyer_id,
-                message=f"Tracking update: {new_status}. {delivery.tracking_note}"
+                message=buyer_message,
+                image=proof_image
             ))
             db.session.add(Notification(
                 user_id=order.buyer_id,
-                message=f"Tracking updated for order #{order.id}: {new_status}"
+                message=f"Tracking updated for order #{order.id}: {new_status}{' with photo' if proof_image else ''}"
             ))
             db.session.commit()
             flash("Delivery tracking updated.", "success")
